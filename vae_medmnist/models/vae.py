@@ -1,9 +1,8 @@
-from re import X
 from typing import List, Tuple
 
-from numpy import rec
+import pytorch_lightning as pl
 import torch
-from torch import nn, tensor as Tensor
+from torch import device, nn, optim, tensor as Tensor
 
 
 class Encoder(nn.Module):
@@ -217,7 +216,7 @@ class Decoder(nn.Module):
         return x
 
 
-class VAE(nn.Module):
+class VAE(pl.LightningModule):
     """
     Variational Autoencoder (VAE) model.
 
@@ -259,17 +258,16 @@ class VAE(nn.Module):
         input_channels: int,
         latent_dim: int,
         hidden_dims: List[int] = [32, 64, 128, 256, 512],
-        output_channels: int = 1,
     ):
         super(VAE, self).__init__()
 
         self.input_channels = input_channels
         self.latent_dim = latent_dim
         self.hidden_dims = hidden_dims
-        self.output_channels = output_channels
+        self.output_channels = input_channels
 
-        self.encoder = Encoder(input_channels, latent_dim, hidden_dims)
-        self.decoder = Decoder(latent_dim, hidden_dims, output_channels)
+        self.encoder = Encoder(self.input_channels, self.latent_dim, self.hidden_dims)
+        self.decoder = Decoder(self.latent_dim, self.hidden_dims, self.output_channels)
 
     def reparameterize(self, mu: Tensor, log_var: Tensor) -> Tensor:
         """
@@ -337,7 +335,24 @@ class VAE(nn.Module):
             "KLD_Loss": kld_loss,
         }
 
-    def sample(self, num_samples: int, device: torch.device) -> Tensor:
+    def training_step(self, batch, batch_idx):
+        x, _ = batch
+        x_hat, mu, log_var = self(x)
+        loss = self.loss_function(x, x_hat, mu, log_var)
+        self.log("train_loss", loss["Total_Loss"])
+        return loss["Total_Loss"]
+
+    def validation_step(self, batch, batch_idx):
+        x, _ = batch
+        x_hat, mu, log_var = self(x)
+        loss = self.loss_function(x, x_hat, mu, log_var)
+        self.log("val_loss", loss["Total_Loss"])
+        return loss["Total_Loss"]
+
+    def configure_optimizers(self):
+        return optim.Adam(self.parameters(), lr=1e-3)
+
+    def sample(self, num_samples: int, device: device) -> Tensor:
         """
         Samples from the latent space and decodes to generate new samples.
 
