@@ -1,0 +1,7 @@
+data_flag: tissuemnist
+epochs: 100
+batch_size: 128
+latent_dim: 128
+learning_rate: 0.001
+checkpoint_dir: ../results/checkpoints
+log_dir: ../results/logs

@@ -8,6 +8,8 @@ authors = [
 dependencies = [
     "medmnist>=3.0.1",
     "jupyter>=1.0.0",
+    "ruff>=0.4.7",
+    "lightning>=2.2.5",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -24,4 +26,4 @@ dev-dependencies = []
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/vae_medmnist"]
+packages = ["vae_medmnist"]
