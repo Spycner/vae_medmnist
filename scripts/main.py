@@ -1,11 +1,14 @@
 import argparse
+import datetime
 import logging
 import os
 import yaml
 
 from medmnist import INFO
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
+from pytorch_lightning.loggers import CSVLogger
+import torch
 
 from vae_medmnist.models.vae import VAE
 from vae_medmnist.models.dataloader import MedMNISTDataModule
@@ -35,28 +38,43 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
-
     setup_logging(config["log_dir"])
 
     in_channels = INFO[config["data_flag"]]["n_channels"]
-
     vae_model = VAE(input_channels=in_channels, latent_dim=config["latent_dim"])
-
     data_module = MedMNISTDataModule(
         data_flag=config["data_flag"], batch_size=config["batch_size"]
     )
 
-    checkpoint_callback = ModelCheckpoint(
+    early_stop_callback = EarlyStopping(
         monitor="val_loss",
-        dirpath=config["checkpoint_dir"],
-        filename=f"vae-{config['data_flag']}-{{epoch:02d}}-{{val_loss:.2f}}",
-        save_top_k=3,
+        min_delta=0.0001,
+        patience=3,
+        verbose=True,
         mode="min",
     )
 
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    checkpoint_dir = f"{config['checkpoint_dir']}/{timestamp}"
+
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss",
+        dirpath=checkpoint_dir,
+        filename=f"vae-{config['data_flag']}-{{epoch:02d}}-{{val_loss:.2f}}",
+        save_top_k=3,
+        mode="min",
+        save_weights_only=True,
+    )
+
+    logger = CSVLogger(config["log_dir"], name="vae_training")
+
+    torch.set_float32_matmul_precision("high")  # or 'medium' depending on your needs
+    torch.backends.cudnn.benchmark = True
+
     trainer = Trainer(
         max_epochs=config["epochs"],
-        callbacks=[checkpoint_callback],
+        callbacks=[checkpoint_callback, early_stop_callback],
+        logger=logger,
     )
 
     logging.info("Starting training...")

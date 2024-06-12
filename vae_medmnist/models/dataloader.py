@@ -12,7 +12,11 @@ class MedMNISTDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
 
         self.transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize(mean=[0.5], std=[0.5])]
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5], std=[0.5]),
+                transforms.Lambda(lambda x: x * 0.5 + 0.5),  # from [-1, 1] to [0, 1]
+            ]
         )
 
     def setup(self, stage=None):
@@ -39,3 +43,16 @@ class MedMNISTDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset, batch_size=self.batch_size, num_workers=7)
+
+
+# # Debug step to check data range
+# def check_data_range(dataloader):
+#     for batch in dataloader:
+#         images, _ = batch
+#         print(f"Min: {images.min()}, Max: {images.max()}")
+#         break
+
+
+# data_module = MedMNISTDataModule()
+# data_module.setup()
+# check_data_range(data_module.train_dataloader())

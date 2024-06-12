@@ -2,6 +2,7 @@ from typing import List, Tuple
 
 import pytorch_lightning as pl
 import torch
+import torch.nn.functional as F
 from torch import device, nn, optim, tensor as Tensor
 
 
@@ -23,7 +24,7 @@ class Encoder(nn.Module):
     hidden_dims : List[int]
         List of integers where each integer represents the number of output channels
         for a convolutional layer in the encoder. If not provided, a default list of
-        [32, 64, 128, 256, 512] will be used.
+        [32, 64, 128] will be used.
 
     Methods:
     --------
@@ -40,7 +41,7 @@ class Encoder(nn.Module):
     hidden_dims : List[int], optional
         List of integers where each integer represents the number of output channels
         for a convolutional layer in the encoder. If None, a default list of
-        [32, 64, 128, 256, 512] will be used.
+        [32, 64, 128] will be used.
 
     Example:
     --------
@@ -55,7 +56,7 @@ class Encoder(nn.Module):
         self,
         input_channels: int,
         latent_dim: int,
-        hidden_dims: List[int] = [32, 64, 128, 256, 512],
+        hidden_dims: List[int] = [32, 64, 128],
     ):
         super(Encoder, self).__init__()
 
@@ -93,8 +94,8 @@ class Encoder(nn.Module):
             ]
         )
 
-        self.fc_mu = nn.Linear(hidden_dims[-1], latent_dim)
-        self.fc_var = nn.Linear(hidden_dims[-1], latent_dim)
+        self.fc_mu = nn.Linear(hidden_dims[-1] * 16, latent_dim)
+        self.fc_var = nn.Linear(hidden_dims[-1] * 16, latent_dim)
 
     def forward(self, input: Tensor) -> List[Tensor]:
         """
@@ -147,7 +148,7 @@ class Decoder(nn.Module):
     def __init__(
         self,
         latent_dim: int,
-        hidden_dims: List[int] = [32, 64, 128, 256, 512],
+        hidden_dims: List[int] = [32, 64, 128],
         output_channels: int = 1,
     ):
         super(Decoder, self).__init__()
@@ -156,7 +157,7 @@ class Decoder(nn.Module):
         self.hidden_dims = hidden_dims
         self.output_channels = output_channels
 
-        self.decoder_input = nn.Linear(latent_dim, hidden_dims[-1] * 4 * 4)
+        self.decoder_input = nn.Linear(latent_dim, hidden_dims[-1] * 7 * 7)
         hidden_dims = hidden_dims[::-1]
 
         self.decoder = nn.Sequential(
@@ -165,45 +166,25 @@ class Decoder(nn.Module):
                     nn.ConvTranspose2d(
                         hidden_dims[i],
                         hidden_dims[i + 1],
-                        kernel_size=3,
+                        kernel_size=4,
                         stride=2,
                         padding=1,
-                        output_padding=1,
                     ),
                     nn.BatchNorm2d(hidden_dims[i + 1]),
                     nn.LeakyReLU(),
                 )
                 for i in range(len(hidden_dims) - 1)
-            ]
-        )
-
-        self.final_layer = nn.Sequential(
-            nn.Conv2d(
-                hidden_dims[-1],
-                hidden_dims[-1] // 2,
-                kernel_size=3,
-                stride=2,
-                padding=1,
+            ],
+            nn.Sequential(
+                nn.ConvTranspose2d(
+                    hidden_dims[-1],
+                    output_channels,
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                ),
+                nn.Sigmoid(),
             ),
-            nn.BatchNorm2d(hidden_dims[-1] // 2),
-            nn.LeakyReLU(),
-            nn.Conv2d(
-                hidden_dims[-1] // 2,
-                out_channels=output_channels // 4,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-            ),
-            nn.BatchNorm2d(hidden_dims[-1] // 4),
-            nn.LeakyReLU(),
-            nn.Conv2d(
-                hidden_dims[-1] // 4,
-                out_channels=output_channels,
-                kernel_size=3,
-                stride=2,
-                padding=1,
-            ),
-            nn.Tanh(),
         )
 
     def forward(self, input: Tensor) -> Tensor:
@@ -221,15 +202,9 @@ class Decoder(nn.Module):
             Reconstructed input tensor of shape (batch_size, output_channels, height, width).
         """
 
-        print(f"Input shape: {input.shape}")
         x = self.decoder_input(input)
-        print(f"Shape after decoder_input: {x.shape}")
-        x = x.view(-1, self.hidden_dims[-1], 4, 4)
-        print(f"Shape after view: {x.shape}")
+        x = x.view(-1, self.hidden_dims[-1], 7, 7)
         x = self.decoder(x)
-        print(f"Shape after decoder: {x.shape}")
-        x = self.final_layer(x)
-        print(f"Shape after final_layer: {x.shape}")
         return x
 
 
@@ -274,7 +249,10 @@ class VAE(pl.LightningModule):
         self,
         input_channels: int,
         latent_dim: int,
-        hidden_dims: List[int] = [32, 64, 128, 256, 512],
+        hidden_dims: List[int] = [32, 64, 128],
+        kl_start_weight: float = 0.001,
+        kl_max_weight: float = 1.0,
+        kl_weight_incr: float = 0.001,
     ):
         super(VAE, self).__init__()
 
@@ -282,6 +260,9 @@ class VAE(pl.LightningModule):
         self.latent_dim = latent_dim
         self.hidden_dims = hidden_dims
         self.output_channels = input_channels
+        self.kl_weight = kl_start_weight
+        self.kl_max_weight = kl_max_weight
+        self.kl_weight_incr = kl_weight_incr
 
         self.encoder = Encoder(self.input_channels, self.latent_dim, self.hidden_dims)
         self.decoder = Decoder(self.latent_dim, self.hidden_dims, self.output_channels)
@@ -313,7 +294,7 @@ class VAE(pl.LightningModule):
         return self.decoder(intermediate), mu, log_var
 
     def loss_function(
-        self, input: Tensor, result: Tensor, mu: Tensor, log_var: Tensor, **kwargs
+        self, input: Tensor, result: Tensor, mu: Tensor, log_var: Tensor
     ) -> dict:
         """
         Calculates the VAE loss including reconstruction loss and KL divergence.
@@ -337,37 +318,85 @@ class VAE(pl.LightningModule):
             Dictionary containing total loss, reconstruction loss, and KL divergence.
         """
 
-        recon_loss = nn.functional.mse_loss(result, input)
+        recon_loss = F.mse_loss(result, input)
 
-        kld_loss = torch.mean(
+        kl_loss = torch.mean(
             -0.5 * torch.sum(1 + log_var - mu.pow(2) - log_var.exp(), dim=1), dim=0
         )
-        kld_weight = kwargs.get("kld_weight", 1.0)
 
-        loss = recon_loss + kld_weight * kld_loss
+        loss = recon_loss + self.kl_weight * kl_loss
 
         return {
             "Total_Loss": loss,
-            "Reconstruction_Loss": recon_loss,
-            "KLD_Loss": kld_loss,
+            "Reconstruction_Loss": recon_loss.detach(),
+            "KLD_Loss": kl_loss.detach(),
         }
 
     def training_step(self, batch, batch_idx):
         x, _ = batch
         x_hat, mu, log_var = self(x)
-        loss = self.loss_function(x, x_hat, mu, log_var)
-        self.log("train_loss", loss["Total_Loss"])
-        return loss["Total_Loss"]
+        loss_dict = self.loss_function(x, x_hat, mu, log_var)
+        self.log(
+            "train_loss",
+            loss_dict["Total_Loss"],
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        self.log(
+            "train_recon_loss",
+            loss_dict["Reconstruction_Loss"],
+            on_step=True,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+        )
+        self.log(
+            "train_kld_loss",
+            loss_dict["KLD_Loss"],
+            on_step=True,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+        )
+
+        self.kl_weight = min(self.kl_weight + self.kl_weight_incr, self.kl_max_weight)
+
+        return loss_dict["Total_Loss"]
 
     def validation_step(self, batch, batch_idx):
         x, _ = batch
         x_hat, mu, log_var = self(x)
-        loss = self.loss_function(x, x_hat, mu, log_var)
-        self.log("val_loss", loss["Total_Loss"])
-        return loss["Total_Loss"]
+        loss_dict = self.loss_function(x, x_hat, mu, log_var)
+        self.log(
+            "val_loss",
+            loss_dict["Total_Loss"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        self.log(
+            "val_recon_loss",
+            loss_dict["Reconstruction_Loss"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+        )
+        self.log(
+            "val_kld_loss",
+            loss_dict["KLD_Loss"],
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+            logger=True,
+        )
+        return loss_dict["Total_Loss"]
 
     def configure_optimizers(self):
-        return optim.Adam(self.parameters(), lr=1e-3)
+        return optim.Adam(self.parameters(), lr=1e-4)
 
     def sample(self, num_samples: int, device: device) -> Tensor:
         """
