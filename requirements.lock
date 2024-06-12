@@ -179,6 +179,7 @@ markupsafe==2.1.5
     # via jinja2
     # via nbconvert
 matplotlib==3.9.0
+    # via seaborn
     # via vae-medmnist
 matplotlib-inline==0.1.7
     # via ipykernel
@@ -222,6 +223,7 @@ numpy==1.26.4
     # via scikit-image
     # via scikit-learn
     # via scipy
+    # via seaborn
     # via tifffile
     # via torchmetrics
     # via torchvision
@@ -272,6 +274,7 @@ packaging==24.0
     # via torchmetrics
 pandas==2.2.2
     # via medmnist
+    # via seaborn
 pandocfilters==1.5.1
     # via nbconvert
 parso==0.8.4
@@ -356,6 +359,8 @@ scikit-learn==1.5.0
 scipy==1.13.1
     # via scikit-image
     # via scikit-learn
+seaborn==0.13.2
+    # via vae-medmnist
 send2trash==1.8.3
     # via jupyter-server
 setuptools==70.0.0

@@ -11,6 +11,7 @@ dependencies = [
     "ruff>=0.4.7",
     "lightning>=2.2.5",
     "matplotlib>=3.9.0",
+    "seaborn>=0.13.2",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"

@@ -94,8 +94,8 @@ class Encoder(nn.Module):
             ]
         )
 
-        self.fc_mu = nn.Linear(hidden_dims[-1] * 16, latent_dim)
-        self.fc_var = nn.Linear(hidden_dims[-1] * 16, latent_dim)
+        self.fc_mu = nn.Linear(hidden_dims[-1], latent_dim)
+        self.fc_var = nn.Linear(hidden_dims[-1], latent_dim)
 
     def forward(self, input: Tensor) -> List[Tensor]:
         """
@@ -249,7 +249,7 @@ class VAE(pl.LightningModule):
         self,
         input_channels: int,
         latent_dim: int,
-        hidden_dims: List[int] = [32, 64, 128],
+        hidden_dims: List[int] = [32, 64, 128, 256, 512],
         kl_start_weight: float = 0.001,
         kl_max_weight: float = 1.0,
         kl_weight_incr: float = 0.001,

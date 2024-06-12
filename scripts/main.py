@@ -1,5 +1,4 @@
 import argparse
-import datetime
 import logging
 import os
 import yaml
@@ -54,14 +53,13 @@ def main():
         mode="min",
     )
 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    checkpoint_dir = f"{config['checkpoint_dir']}/{timestamp}"
+    checkpoint_dir = config["checkpoint_dir"]
 
     checkpoint_callback = ModelCheckpoint(
         monitor="val_loss",
         dirpath=checkpoint_dir,
         filename=f"vae-{config['data_flag']}-{{epoch:02d}}-{{val_loss:.2f}}",
-        save_top_k=3,
+        save_top_k=1,
         mode="min",
         save_weights_only=True,
     )
