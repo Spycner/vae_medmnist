@@ -32,7 +32,6 @@ def main():
     parser.add_argument(
         "--config", type=str, required=True, help="Path to the config file"
     )
-    parser.add_argument("--gpus", type=int, default=0, help="Number of GPUs to use")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -57,7 +56,6 @@ def main():
 
     trainer = Trainer(
         max_epochs=config["epochs"],
-        gpus=args.gpus,
         callbacks=[checkpoint_callback],
     )
 

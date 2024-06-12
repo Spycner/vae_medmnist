@@ -93,8 +93,8 @@ class Encoder(nn.Module):
             ]
         )
 
-        self.fc_mu = nn.Linear(hidden_dims[-1] * 4, latent_dim)
-        self.fc_var = nn.Linear(hidden_dims[-1] * 4, latent_dim)
+        self.fc_mu = nn.Linear(hidden_dims[-1], latent_dim)
+        self.fc_var = nn.Linear(hidden_dims[-1], latent_dim)
 
     def forward(self, input: Tensor) -> List[Tensor]:
         """
@@ -156,7 +156,7 @@ class Decoder(nn.Module):
         self.hidden_dims = hidden_dims
         self.output_channels = output_channels
 
-        self.decoder_input = nn.Linear(latent_dim, hidden_dims[-1] * 4)
+        self.decoder_input = nn.Linear(latent_dim, hidden_dims[-1] * 4 * 4)
         hidden_dims = hidden_dims[::-1]
 
         self.decoder = nn.Sequential(
@@ -178,18 +178,30 @@ class Decoder(nn.Module):
         )
 
         self.final_layer = nn.Sequential(
-            nn.ConvTranspose2d(
+            nn.Conv2d(
                 hidden_dims[-1],
-                hidden_dims[-1],
+                hidden_dims[-1] // 2,
                 kernel_size=3,
                 stride=2,
                 padding=1,
-                output_padding=1,
             ),
-            nn.BatchNorm2d(hidden_dims[-1]),
+            nn.BatchNorm2d(hidden_dims[-1] // 2),
             nn.LeakyReLU(),
             nn.Conv2d(
-                hidden_dims[-1], out_channels=output_channels, kernel_size=3, padding=1
+                hidden_dims[-1] // 2,
+                out_channels=output_channels // 4,
+                kernel_size=3,
+                stride=2,
+                padding=1,
+            ),
+            nn.BatchNorm2d(hidden_dims[-1] // 4),
+            nn.LeakyReLU(),
+            nn.Conv2d(
+                hidden_dims[-1] // 4,
+                out_channels=output_channels,
+                kernel_size=3,
+                stride=2,
+                padding=1,
             ),
             nn.Tanh(),
         )
@@ -209,10 +221,15 @@ class Decoder(nn.Module):
             Reconstructed input tensor of shape (batch_size, output_channels, height, width).
         """
 
+        print(f"Input shape: {input.shape}")
         x = self.decoder_input(input)
+        print(f"Shape after decoder_input: {x.shape}")
         x = x.view(-1, self.hidden_dims[-1], 4, 4)
+        print(f"Shape after view: {x.shape}")
         x = self.decoder(x)
+        print(f"Shape after decoder: {x.shape}")
         x = self.final_layer(x)
+        print(f"Shape after final_layer: {x.shape}")
         return x
 
 
