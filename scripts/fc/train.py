@@ -3,14 +3,13 @@ import logging
 import os
 import yaml
 
-from medmnist import INFO
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import CSVLogger
 import torch
 
-from vae_medmnist.models.vae import VAE
-from vae_medmnist.models.dataloader import MedMNISTDataModule
+from vae_medmnist.models.fc_vae import FcVAE
+from vae_medmnist.models.dataloader import FcMedMNISTDataModule
 
 
 def setup_logging(log_dir):
@@ -30,7 +29,7 @@ def load_config(config_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="VAE MedMNIST Training")
+    parser = argparse.ArgumentParser(description="FcVAE MedMNIST Training")
     parser.add_argument(
         "--config", type=str, required=True, help="Path to the config file"
     )
@@ -39,9 +38,11 @@ def main():
     config = load_config(args.config)
     setup_logging(config["log_dir"])
 
-    in_channels = INFO[config["data_flag"]]["n_channels"]
-    vae_model = VAE(input_channels=in_channels, latent_dim=config["latent_dim"])
-    data_module = MedMNISTDataModule(
+    vae_model = FcVAE(
+        hidden_dims=config["hidden_dims"],
+        latent_dim=config["latent_dim"],
+    )
+    data_module = FcMedMNISTDataModule(
         data_flag=config["data_flag"], batch_size=config["batch_size"]
     )
 
@@ -64,7 +65,7 @@ def main():
         save_weights_only=True,
     )
 
-    logger = CSVLogger(config["log_dir"], name="vae_training")
+    logger = CSVLogger(config["log_dir"], name="fcvae_training")
 
     torch.set_float32_matmul_precision("high")  # or 'medium' depending on your needs
     torch.backends.cudnn.benchmark = True
