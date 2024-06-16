@@ -40,7 +40,11 @@ def main():
     setup_logging(config["log_dir"])
 
     in_channels = INFO[config["data_flag"]]["n_channels"]
-    vae_model = VAE(input_channels=in_channels, latent_dim=config["latent_dim"])
+    vae_model = VAE(
+        input_channels=in_channels,
+        latent_dim=config["latent_dim"],
+        lr=config["learning_rate"],
+    )
     data_module = MedMNISTDataModule(
         data_flag=config["data_flag"], batch_size=config["batch_size"]
     )
@@ -73,6 +77,7 @@ def main():
         max_epochs=config["epochs"],
         callbacks=[checkpoint_callback, early_stop_callback],
         logger=logger,
+        gradient_clip_val=1.0,
     )
 
     logging.info("Starting training...")

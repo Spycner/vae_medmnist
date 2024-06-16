@@ -28,7 +28,11 @@ class FcVAE(pl.LightningModule):
     """
 
     def __init__(
-        self, input_dim: int = 28 * 28, hidden_dims: List = [400], latent_dim: int = 128
+        self,
+        input_dim: int = 28 * 28,
+        hidden_dims: List = [400],
+        latent_dim: int = 128,
+        lr: float = 1e-3,
     ):
         """
         Initializes the SimpleVAE model.
@@ -39,6 +43,7 @@ class FcVAE(pl.LightningModule):
             latent_dim (int): The dimension of the latent space.
         """
         super(FcVAE, self).__init__()
+        self.lr = lr
 
         self.encoder = nn.Sequential(
             nn.Linear(input_dim, hidden_dims[0]),
@@ -75,7 +80,11 @@ class FcVAE(pl.LightningModule):
         Returns:
             (torch.Tensor, torch.Tensor): The mean and variance of the latent space.
         """
+        print(f"Training step: x - {x.min().item()} to {x.max().item()}")
         encoded = self.encoder(x)
+        print(
+            f"after encoder: encoded - {encoded.min().item()} to {encoded.max().item()}"
+        )
         return self.fc_mu(encoded), self.fc_var(encoded)
 
     def reparameterize(self, mu, logvar):
@@ -172,6 +181,8 @@ class FcVAE(pl.LightningModule):
 
         print(f"Input range: {x.min().item()} to {x.max().item()}")
         print(f"Output range: {x_hat.min().item()} to {x_hat.max().item()}")
+        print(f"mu range: {mu.min().item()} to {mu.max().item()}")
+        print(f"log_var range: {log_var.min().item()} to {log_var.max().item()}")
 
         loss_dict = self.loss_function(x, x_hat, mu, log_var)
         self.log(
@@ -216,6 +227,8 @@ class FcVAE(pl.LightningModule):
 
         print(f"Input range: {x.min().item()} to {x.max().item()}")
         print(f"Output range: {x_hat.min().item()} to {x_hat.max().item()}")
+        print(f"mu range: {mu.min().item()} to {mu.max().item()}")
+        print(f"log_var range: {log_var.min().item()} to {log_var.max().item()}")
 
         loss_dict = self.loss_function(x, x_hat, mu, log_var)
         self.log(
@@ -251,7 +264,7 @@ class FcVAE(pl.LightningModule):
         Returns:
             torch.optim.Optimizer: The configured optimizer.
         """
-        return torch.optim.Adam(self.parameters(), lr=1e-3)
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
 
     def sample(self, num_samples: int, device: device) -> Tensor:
         """

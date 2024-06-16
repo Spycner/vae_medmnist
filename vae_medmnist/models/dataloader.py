@@ -1,6 +1,7 @@
 import medmnist
 from medmnist import INFO
 import pytorch_lightning as pl
+import torch
 from torchvision import transforms
 from torch.utils.data import DataLoader
 
@@ -73,6 +74,11 @@ class FcMedMNISTDataModule(pl.LightningDataModule):
         self.test_dataset = DataClass(
             split="test", transform=self.transform, download=True
         )
+
+        for dataset in [self.train_dataset, self.val_dataset, self.test_dataset]:
+            for data, _ in dataset:
+                if torch.isnan(data).any():
+                    print("NaNs detected in the dataset")
 
     def train_dataloader(self):
         return DataLoader(
