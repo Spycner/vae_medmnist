@@ -8,10 +8,13 @@ authors = [
 dependencies = [
     "medmnist>=3.0.1",
     "jupyter>=1.0.0",
-    "ruff>=0.4.7",
+    "ruff>=0.4.9",
     "lightning>=2.2.5",
     "matplotlib>=3.9.0",
     "seaborn>=0.13.2",
+    "torch==2.3.1+cu121",
+    "torchvision==0.18.1+cu121",
+    "torchaudio==2.3.1+cu121",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -29,3 +32,14 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["vae_medmnist"]
+
+[[tool.rye.sources]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+type = "index"
+
+[tool.ruff]
+line-length = 120
+select = ["E", "F", "I", "B", "ARG", "SIM", "UP"]
+[tool.ruff.format]
+quote-style = "single"

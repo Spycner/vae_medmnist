@@ -1,0 +1,5 @@
+dataset: tissuemnist
+max_epochs: 10
+checkpoint_dir: results/checkpoints/resnet_vae
+log_dir: results/logs
+batch_size: 256

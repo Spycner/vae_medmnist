@@ -1,9 +1,0 @@
-data_flag: tissuemnist
-epochs: 10
-batch_size: 128
-latent_dim: 10
-hidden_dims: [256, 128]
-learning_rate: 1e-4
-checkpoint_dir: results/checkpoints/fc_vae
-log_dir: results/logs
-eval_dir: results/evals/fc_vae
