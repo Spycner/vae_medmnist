@@ -5,47 +5,49 @@ import torchvision
 
 def save_metrics_plot(metrics, save_path):
     """Save plots of training and validation metrics to the specified path."""
+    if not isinstance(metrics, pd.DataFrame):
+        raise ValueError("The 'metrics' input must be a pandas DataFrame.")
     # Plotting training losses
     plt.figure()
-    if 'train_loss' in metrics and metrics['train_loss']:
-        plt.plot(metrics['train_loss'], label='Train Loss')
-    if 'train_kl' in metrics and metrics['train_kl']:
-        plt.plot(metrics['train_kl'], label='Train KL')
-    if 'train_recon_loss' in metrics and metrics['train_recon_loss']:
-        plt.plot(metrics['train_recon_loss'], label='Train Recon Loss')
+    if 'train_loss' in metrics.columns:
+        plt.plot(metrics['train_loss'].dropna(), label='Train Loss')
+    if 'train_kl' in metrics.columns:
+        plt.plot(metrics['train_kl'].dropna(), label='Train KL')
+    if 'train_recon_loss' in metrics.columns:
+        plt.plot(metrics['train_recon_loss'].dropna(), label='Train Recon Loss')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Training Losses')
     plt.legend()
-    plt.savefig(f'{save_path}_train.png')
+    plt.savefig(f'{save_path}/train_losses.png')
     plt.close()
 
     # Plotting validation losses
     plt.figure()
-    if 'val_loss' in metrics and metrics['val_loss']:
-        plt.plot(metrics['val_loss'], label='Validation Loss')
-    if 'val_kl' in metrics and metrics['val_kl']:
-        plt.plot(metrics['val_kl'], label='Validation KL')
-    if 'val_recon_loss' in metrics and metrics['val_recon_loss']:
-        plt.plot(metrics['val_recon_loss'], label='Validation Recon Loss')
+    if 'val_loss' in metrics.columns:
+        plt.plot(metrics['val_loss'].dropna(), label='Validation Loss')
+    if 'val_kl' in metrics.columns:
+        plt.plot(metrics['val_kl'].dropna(), label='Validation KL')
+    if 'val_recon_loss' in metrics.columns:
+        plt.plot(metrics['val_recon_loss'].dropna(), label='Validation Recon Loss')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Validation Losses')
     plt.legend()
-    plt.savefig(f'{save_path}_val.png')
+    plt.savefig(f'{save_path}/val_losses.png')
     plt.close()
 
     # Plotting comparison of overall train and validation losses
     plt.figure()
-    if 'train_loss' in metrics and metrics['train_loss']:
-        plt.plot(metrics['train_loss'], label='Train Loss')
-    if 'val_loss' in metrics and metrics['val_loss']:
-        plt.plot(metrics['val_loss'], label='Validation Loss')
+    if 'train_loss' in metrics.columns:
+        plt.plot(metrics['train_loss'].dropna(), label='Train Loss')
+    if 'val_loss' in metrics.columns:
+        plt.plot(metrics['val_loss'].dropna(), label='Validation Loss')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Comparison of Training and Validation Loss')
     plt.legend()
-    plt.savefig(f'{save_path}_comparison.png')
+    plt.savefig(f'{save_path}/loss_comparison.png')
     plt.close()
 
 
@@ -55,11 +57,18 @@ def save_generated_images(model, num_samples, device, save_path):
     with torch.no_grad():
         samples = model.sample(num_samples, device)
 
-    samples = samples.clamp(0, 1)
-    grid_img = torchvision.utils.make_grid(samples, nrow=5)
-    plt.imshow(grid_img.permute(1, 2, 0))
-    plt.title('Generated Images')
-    plt.axis('off')
+    if num_samples % 2 == 0:
+        fig, axs = plt.subplots(2, num_samples // 2, figsize=(15, 3))
+    else:
+        fig, axs = plt.subplots(1, num_samples, figsize=(15, 3))
+    
+    axs = axs.flatten()
+    
+    for ax, img in zip(axs, samples):
+        ax.imshow(img.cpu().permute(1, 2, 0), cmap='gray')
+        ax.axis('off')
+    
+    plt.suptitle('Generated Images')
     plt.savefig(save_path)
     plt.close()
 
