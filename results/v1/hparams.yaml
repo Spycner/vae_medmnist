@@ -1,5 +1,5 @@
 batch_size: 32
-checkpoint_dir: results/checkpoints/resnet_vae
+checkpoint_dir: results/v1/
 config: null
 data_dir: .
 dataset: tissuemnist
@@ -13,3 +13,4 @@ lr: 0.0001
 max_epochs: 10
 maxpool1: false
 num_workers: 8
+model: resnet_vae

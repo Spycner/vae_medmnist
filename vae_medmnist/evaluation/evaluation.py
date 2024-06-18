@@ -78,7 +78,12 @@ def save_reconstructions(model, dataloader, device, save_path):
     inputs, _ = next(iter(dataloader))
     inputs = inputs.to(device)
     with torch.no_grad():
-        _, reconstructions, _, _ = model(inputs)
+        if isinstance(model, ResNetVAE):
+            _, reconstructions, _, _ = model(inputs)
+        elif isinstance(model, VAE):
+            reconstructions, _, _ = model(inputs)
+        else:
+            raise NotImplementedError('Model type not supported for reconstructions.')
 
     fig, axs = plt.subplots(2, 10, figsize=(15, 3))
     for i in range(10):
@@ -102,6 +107,7 @@ if __name__ == '__main__':
 
     from vae_medmnist.datamodules.medmnist_datamodule import MedMNISTDataModule
     from vae_medmnist.models.resnet_vae import ResNetVAE
+    from vae_medmnist.models.vae import VAE
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--log_path', type=str, help='Path to the training logs')
@@ -116,7 +122,10 @@ if __name__ == '__main__':
     metrics_path = os.path.join(args.log_path, 'metrics.csv')
     metrics_df = pd.read_csv(metrics_path)
 
-    model = ResNetVAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
+    if hparams['model'] == 'resnet_vae':
+        model = ResNetVAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
+    else:
+        model = VAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
     model.to(args.device)
 
     if hparams['dataset'] == 'tissuemnist':

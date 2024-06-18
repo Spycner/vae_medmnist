@@ -1,5 +1,6 @@
 import logging
 from argparse import ArgumentParser
+from typing import List
 
 import pytorch_lightning as pl
 import torch
@@ -7,71 +8,119 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from vae_medmnist.datamodules.medmnist_datamodule import MedMNISTDataModule
-from vae_medmnist.models.components import resnet18_decoder, resnet18_encoder
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
-class ResNetVAE(pl.LightningModule):
+class VAE(pl.LightningModule):
     """ResNetVAE model class."""
 
     def __init__(
         self,
-        input_height: int,
+        input_channels: int = 1,
         lr: float = 1e-4,
         kl_coeff: float = 0.1,
-        enc_out_dim: int = 512,
+        hidden_channels: List = None,
         latent_dim: int = 256,
-        first_conv: bool = False,
-        maxpool1: bool = False,
         **kwargs,  # noqa: ARG002
     ):
         """Initialize the ResNetVAE model."""
         super().__init__()
-
         self.save_hyperparameters()
-        self.input_height = input_height
+        self.input_channels = input_channels
         self.lr = lr
         self.kl_coeff = kl_coeff
-        self.enc_out_dim = enc_out_dim
+        self.hidden_channels = hidden_channels
         self.latent_dim = latent_dim
 
-        self.encoder = resnet18_encoder(first_conv, maxpool1)
-        self.decoder = resnet18_decoder(self.latent_dim, self.input_height, first_conv, maxpool1)
+        if self.hidden_channels is None:
+            self.hidden_channels = [32, 64, 128, 256, 512]
 
-        self.fc_mu = nn.Linear(self.enc_out_dim, self.latent_dim)
-        self.fc_logvar = nn.Linear(self.enc_out_dim, self.latent_dim)
+        self.encoder = nn.Sequential(
+            nn.Conv2d(self.input_channels, self.hidden_channels[0], kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(self.hidden_channels[0]),
+            nn.ReLU(),
+            *[
+                nn.Sequential(
+                    nn.Conv2d(self.hidden_channels[i], self.hidden_channels[i + 1], kernel_size=3, stride=2, padding=1),
+                    nn.BatchNorm2d(self.hidden_channels[i + 1]),
+                    nn.ReLU(),
+                )
+                for i in range(len(self.hidden_channels) - 1)
+            ],
+        )
+
+        self.fc_mu = nn.Linear(self.hidden_channels[-1], self.latent_dim)
+        self.fc_logvar = nn.Linear(self.hidden_channels[-1], self.latent_dim)
+
+        self.hidden_channels = self.hidden_channels[::-1]
+
+        self.decoder_input = nn.Linear(self.latent_dim, self.hidden_channels[0] * 4)
+
+        self.decoder = nn.Sequential(
+            *[
+                nn.Sequential(  # 3, 5, 9, 17
+                    nn.ConvTranspose2d(
+                        self.hidden_channels[i],
+                        self.hidden_channels[i + 1],
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        output_padding=1,
+                    ),
+                    nn.BatchNorm2d(self.hidden_channels[i + 1]),
+                    nn.ReLU(),
+                )
+                for i in range(len(self.hidden_channels) - 1)
+            ],
+            nn.ConvTranspose2d(self.hidden_channels[-1], self.hidden_channels[-1], kernel_size=3, stride=2, padding=4),
+            nn.BatchNorm2d(self.hidden_channels[-1]),
+            nn.ReLU(),
+            nn.Conv2d(self.hidden_channels[-1], self.input_channels, kernel_size=3, stride=2),
+            nn.Tanh(),
+        )
 
     def forward(self, x):
         """Forward pass through the model."""
         x = self.encoder(x)
-        mu = self.fc_mu(x)
-        logvar = self.fc_logvar(x)
+        res = torch.flatten(x, start_dim=1)
 
-        p, q, z = self.reparameterize(mu, logvar)
+        mu = self.fc_mu(res)
+        logvar = self.fc_logvar(res)
 
-        return z, self.decoder(z), p, q
+        z = self.reparameterize(mu, logvar)
+
+        return (
+            self.decode(z),
+            mu,
+            logvar,
+        )
+
+    def decode(self, x):
+        """Decode the latent variables."""
+        decoder_input = self.decoder_input(x)
+        decoder_input = decoder_input.view(-1, self.hidden_channels[0], 2, 2)
+
+        return self.decoder(decoder_input)
 
     def reparameterize(self, mu, logvar):
         """Reparameterize the latent variables."""
         std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        z = mu + eps * std
 
-        p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
-        q = torch.distributions.Normal(mu, std)
-        z = q.rsample()
-        return p, q, z
+        return z
 
     def step(self, batch, batch_idx):  # noqa: ARG002
         """Perform a single optimization step."""
         x, y = batch
-        z, x_hat, p, q = self(x)
+        x_hat, mu, logvar = self(x)
 
-        recon_loss = F.mse_loss(x_hat, x, reduction='mean')
+        recon_loss = F.mse_loss(x_hat, x)
 
-        kl = torch.distributions.kl_divergence(q, p).mean()
+        kl = torch.mean(-0.5 * torch.sum(1 + logvar - mu**2 - torch.exp(logvar), dim=1), dim=0)
         kl *= self.kl_coeff
-
         loss = recon_loss + kl
 
         logs = {
@@ -102,7 +151,7 @@ class ResNetVAE(pl.LightningModule):
         """Sample new pictures from the VAE."""
         device = device or self.device
         z = torch.randn(num_samples, self.latent_dim, device=device)
-        samples = self.decoder(z)
+        samples = self.decode(z)
         return samples
 
     @staticmethod
@@ -110,16 +159,8 @@ class ResNetVAE(pl.LightningModule):
         """Add model-specific arguments to the parser."""
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
 
-        parser.add_argument('--first_conv', action='store_true')
-        parser.add_argument('--maxpool1', action='store_true')
         parser.add_argument('--lr', type=float, default=1e-4)
 
-        parser.add_argument(
-            '--enc_out_dim',
-            type=int,
-            default=512,
-            help='512 for resnet18',
-        )
         parser.add_argument('--kl_coeff', type=float, default=0.1)
         parser.add_argument('--latent_dim', type=int, default=256)
 
@@ -132,6 +173,7 @@ class ResNetVAE(pl.LightningModule):
 def cli_main(args=None):
     """Main function for command-line interface."""
     import yaml
+    from medmnist import INFO
     from medmnist.dataset import TissueMNIST
     from pytorch_lightning.callbacks import ModelCheckpoint
     from pytorch_lightning.loggers import CSVLogger
@@ -147,7 +189,7 @@ def cli_main(args=None):
         logger.debug(f'Loaded configuration: {config}')
 
     # Update parser with options from the config file
-    parser = ResNetVAE.add_model_specific_args(parser)
+    parser = VAE.add_model_specific_args(parser)
     parser.set_defaults(**config)
     args = parser.parse_args(unknown)
 
@@ -157,9 +199,9 @@ def cli_main(args=None):
         raise ValueError(f'Unknown dataset: {args.dataset}')
 
     datamodule = MedMNISTDataModule(dataset_class, **args.__dict__)
-    args.input_height = datamodule.size
+    args.input_channels = INFO[args.dataset]['n_channels']
 
-    model = ResNetVAE(**args.__dict__)
+    model = VAE(**args.__dict__)
 
     # Setup model checkpointing
     checkpoint_callback = ModelCheckpoint(

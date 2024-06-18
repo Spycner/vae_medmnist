@@ -1,0 +1,13 @@
+batch_size: 512
+checkpoint_dir: results/v2
+config: null
+dataset: tissuemnist
+hidden_channels: null
+input_channels: 1
+kl_coeff: 0.00025
+latent_dim: 128
+log_dir: results/logs
+lr: 0.005
+max_epochs: 100
+num_workers: 8
+model: vae
