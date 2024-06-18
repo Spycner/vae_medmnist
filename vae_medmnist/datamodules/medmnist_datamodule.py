@@ -19,12 +19,12 @@ class MedMNISTDataModule(LightningDataModule):
     def setup(self, stage=None):
         # Assign train/val datasets for use in dataloaders
         if stage == 'fit' or stage is None:
-            self.mnist_train = self.dataset_class(split='train', transform=self.default_transform(), size=self.size)  # noqa: B026
-            self.mnist_val = self.dataset_class(split='val', transform=self.default_transform(), size=self.size)  # noqa: B026
+            self.mnist_train = self.dataset_class(split='train', transform=self.default_transform(), size=self.size, download=True)  # noqa: B026
+            self.mnist_val = self.dataset_class(split='val', transform=self.default_transform(), size=self.size, download=True)  # noqa: B026
 
         # Assign test dataset for use in dataloader(s)
         if stage == 'test' or stage is None:
-            self.mnist_test = self.dataset_class(split='test', transform=self.default_transform(), size=self.size)  # noqa: B026
+            self.mnist_test = self.dataset_class(split='test', transform=self.default_transform(), size=self.size, download=True)  # noqa: B026
 
     def default_transform(self) -> Callable:
         return transforms.Compose(

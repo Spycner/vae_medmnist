@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from vae_medmnist.datamodules.medmnist_datamodule import MedMNISTDataModule
 from vae_medmnist.models.components import resnet18_decoder, resnet18_encoder
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
