@@ -41,5 +41,6 @@ type = "index"
 [tool.ruff]
 line-length = 120
 select = ["E", "F", "I", "B", "ARG", "SIM", "UP"]
+ignore = ["E501"]
 [tool.ruff.format]
 quote-style = "single"

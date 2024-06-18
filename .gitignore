@@ -10,4 +10,3 @@ wheels/
 .venv
 lightning_logs/
 results/logs/
-results/checkpoints/

@@ -89,6 +89,22 @@ class ResNetVAE(pl.LightningModule):
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
+    def sample(self, num_samples=1, device=None):
+        """
+        Sample new pictures from the VAE.
+
+        Args:
+            num_samples (int): Number of samples to generate.
+            device (torch.device): Device to perform the computation on.
+
+        Returns:
+            torch.Tensor: Decoded images from the sampled latent vectors.
+        """
+        device = device or self.device
+        z = torch.randn(num_samples, self.latent_dim, device=device)
+        samples = self.decoder(z)
+        return samples
+
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
