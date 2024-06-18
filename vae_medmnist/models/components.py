@@ -9,6 +9,8 @@ logger.setLevel(logging.INFO)
 
 
 class Interpolate(nn.Module):
+    """Module for interpolating tensors to a specified scale or size."""
+
     def __init__(self, scale_factor: float = None, size: int = None) -> None:
         super().__init__()
         self.scale_factor = scale_factor
@@ -19,26 +21,32 @@ class Interpolate(nn.Module):
 
 
 def conv1x1(in_planes, out_planes, stride=1, padding=0, bias=False):
+    """1x1 convolution."""
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, padding=padding, bias=bias)
 
 
 def conv3x3(in_planes, out_planes, stride=1, padding=1, bias=False):
+    """3x3 convolution."""
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=padding, bias=bias)
 
 
 def dec_conv1x1(in_planes, out_planes, scale: int = 1):
+    """1x1 deconvolution with optional scaling."""
     if scale == 1:
         return conv1x1(in_planes, out_planes)
     return nn.Sequential(Interpolate(scale_factor=scale), conv1x1(in_planes, out_planes))
 
 
 def dec_conv3x3(in_planes, out_planes, scale: int = 1):
+    """3x3 deconvolution with optional scaling."""
     if scale == 1:
         return conv3x3(in_planes, out_planes)
     return nn.Sequential(Interpolate(scale_factor=scale), conv3x3(in_planes, out_planes))
 
 
 class EncoderBlock(nn.Module):
+    """Encoder block for a ResNet architecture."""
+
     expansion = 1
 
     def __init__(self, in_planes, planes, stride=1, downsample=None) -> None:
@@ -71,6 +79,8 @@ class EncoderBlock(nn.Module):
 
 
 class DecoderBlock(nn.Module):
+    """Decoder block for a ResNet architecture."""
+
     expansion = 1
 
     def __init__(self, in_planes, planes, scale=1, upsample=None) -> None:
@@ -103,6 +113,8 @@ class DecoderBlock(nn.Module):
 
 
 class ResNetEncoder(nn.Module):
+    """ResNet encoder module."""
+
     def __init__(self, block, layers, first_conv=False, maxpool1=False) -> None:
         super().__init__()
 
@@ -161,7 +173,7 @@ class ResNetEncoder(nn.Module):
 
 
 class ResNetDecoder(nn.Module):
-    """Resnet in reverse order."""
+    """ResNet decoder module."""
 
     def __init__(self, block, layers, latent_dim, input_height, first_conv=False, maxpool1=False) -> None:
         super().__init__()
@@ -234,8 +246,10 @@ class ResNetDecoder(nn.Module):
 
 
 def resnet18_encoder(first_conv, maxpool1):
+    """Create a ResNet18 encoder."""
     return ResNetEncoder(EncoderBlock, [2, 2, 2, 2], first_conv, maxpool1)
 
 
 def resnet18_decoder(latent_dim, input_height, first_conv, maxpool1):
+    """Create a ResNet18 decoder."""
     return ResNetDecoder(DecoderBlock, [2, 2, 2, 2], latent_dim, input_height, first_conv, maxpool1)

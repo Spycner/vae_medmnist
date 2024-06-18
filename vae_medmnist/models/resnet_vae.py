@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class ResNetVAE(pl.LightningModule):
+    """ResNetVAE model class."""
+
     def __init__(
         self,
         input_height: int,
@@ -25,6 +27,7 @@ class ResNetVAE(pl.LightningModule):
         maxpool1: bool = False,
         **kwargs,  # noqa: ARG002
     ):
+        """Initialize the ResNetVAE model."""
         super().__init__()
 
         self.save_hyperparameters()
@@ -41,6 +44,7 @@ class ResNetVAE(pl.LightningModule):
         self.fc_logvar = nn.Linear(self.enc_out_dim, self.latent_dim)
 
     def forward(self, x):
+        """Forward pass through the model."""
         x = self.encoder(x)
         mu = self.fc_mu(x)
         logvar = self.fc_logvar(x)
@@ -50,6 +54,7 @@ class ResNetVAE(pl.LightningModule):
         return z, self.decoder(z), p, q
 
     def reparameterize(self, mu, logvar):
+        """Reparameterize the latent variables."""
         std = torch.exp(0.5 * logvar)
 
         p = torch.distributions.Normal(torch.zeros_like(mu), torch.ones_like(std))
@@ -58,6 +63,7 @@ class ResNetVAE(pl.LightningModule):
         return p, q, z
 
     def step(self, batch, batch_idx):  # noqa: ARG002
+        """Perform a single optimization step."""
         x, y = batch
         z, x_hat, p, q = self(x)
 
@@ -77,29 +83,23 @@ class ResNetVAE(pl.LightningModule):
         return loss, logs
 
     def training_step(self, batch, batch_idx):
+        """Perform a single training step."""
         loss, logs = self.step(batch, batch_idx)
         self.log_dict({f'train_{k}': v for k, v in logs.items()}, on_step=True, on_epoch=False)
         return loss
 
     def validation_step(self, batch, batch_idx):
+        """Perform a single validation step."""
         loss, logs = self.step(batch, batch_idx)
         self.log_dict({f'val_{k}': v for k, v in logs.items()})
         return loss
 
     def configure_optimizers(self):
+        """Configure the optimizers."""
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
     def sample(self, num_samples=1, device=None):
-        """
-        Sample new pictures from the VAE.
-
-        Args:
-            num_samples (int): Number of samples to generate.
-            device (torch.device): Device to perform the computation on.
-
-        Returns:
-            torch.Tensor: Decoded images from the sampled latent vectors.
-        """
+        """Sample new pictures from the VAE."""
         device = device or self.device
         z = torch.randn(num_samples, self.latent_dim, device=device)
         samples = self.decoder(z)
@@ -107,6 +107,7 @@ class ResNetVAE(pl.LightningModule):
 
     @staticmethod
     def add_model_specific_args(parent_parser):
+        """Add model-specific arguments to the parser."""
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
 
         parser.add_argument('--first_conv', action='store_true')
@@ -130,6 +131,7 @@ class ResNetVAE(pl.LightningModule):
 
 
 def cli_main(args=None):
+    """Main function for command-line interface."""
     import yaml
     from medmnist.dataset import TissueMNIST
     from pytorch_lightning.callbacks import ModelCheckpoint
