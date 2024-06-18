@@ -202,6 +202,8 @@ Reconstructions: Below are comparisons between original images and their reconst
 
 ## Citations
 
+Yang, J., Shi, R., Wei, D. et al. MedMNIST v2 - A large-scale lightweight benchmark for 2D and 3D biomedical image classification. Sci Data 10, 41 (2023). <https://doi.org/10.1038/s41597-022-01721-8>
+
 Some parts of this project were largely inspired by the [Lightning Bolts](https://lightning.ai/docs/pytorch/stable/ecosystem/bolts.html) library. The ResNet architecture for the model was modified, updated and extended to handle the MedMNIST dataset.
 
 For examples using other datasets, you might want to view the following colab: [VAE tutorial](https://colab.research.google.com/drive/1_yGmk8ahWhDs23U4mpplBFa-39fsEJoT?usp=sharing#scrollTo=MvBo844ZHQhF)
