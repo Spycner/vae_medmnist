@@ -9,4 +9,5 @@ wheels/
 # venv
 .venv
 lightning_logs/
-results/
+results/logs/
+results/checkpoints/
