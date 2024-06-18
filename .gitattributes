@@ -1,1 +1,2 @@
 *.cpkt filter=lfs diff=lfs merge=lfs -text
+results/checkpoints/resnet_vae/best-checkpoint.ckpt filter=lfs diff=lfs merge=lfs -text
