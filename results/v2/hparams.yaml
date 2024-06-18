@@ -1,5 +1,5 @@
 batch_size: 512
-checkpoint_dir: results/v2
+checkpoint_dir: results/checkpoints/vae
 config: null
 dataset: tissuemnist
 hidden_channels: null

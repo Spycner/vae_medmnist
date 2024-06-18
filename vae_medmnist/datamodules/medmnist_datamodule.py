@@ -42,7 +42,11 @@ class MedMNISTDataModule(LightningDataModule):
 
     def train_dataloader(self):
         return DataLoader(
-            self.mnist_train, batch_size=self.batch_size, num_workers=self.num_workers, persistent_workers=True
+            self.mnist_train,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            shuffle=True,
+            persistent_workers=True,
         )
 
     def val_dataloader(self):
@@ -57,7 +61,6 @@ class MedMNISTDataModule(LightningDataModule):
     def add_dataset_specific_args(parent_parser: ArgumentParser) -> ArgumentParser:
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
 
-        parser.add_argument('--data_dir', type=str, default='.')
         parser.add_argument('--num_workers', type=int, default=0)
         parser.add_argument('--batch_size', type=int, default=32)
 
