@@ -1,6 +1,5 @@
 import matplotlib.pyplot as plt
 import torch
-import torchvision
 
 
 def save_metrics_plot(metrics, save_path):
@@ -61,13 +60,13 @@ def save_generated_images(model, num_samples, device, save_path):
         fig, axs = plt.subplots(2, num_samples // 2, figsize=(15, 3))
     else:
         fig, axs = plt.subplots(1, num_samples, figsize=(15, 3))
-    
+
     axs = axs.flatten()
-    
+
     for ax, img in zip(axs, samples):
         ax.imshow(img.cpu().permute(1, 2, 0), cmap='gray')
         ax.axis('off')
-    
+
     plt.suptitle('Generated Images')
     plt.savefig(save_path)
     plt.close()
@@ -85,8 +84,10 @@ def save_reconstructions(model, dataloader, device, save_path):
     for i in range(10):
         axs[0, i].imshow(inputs[i].permute(1, 2, 0).cpu(), cmap='gray')
         axs[0, i].axis('off')
+        axs[0, i].set_title('Input', fontsize=8, loc='center')
         axs[1, i].imshow(reconstructions[i].permute(1, 2, 0).cpu(), cmap='gray')
         axs[1, i].axis('off')
+        axs[1, i].set_title('Reconstruction', fontsize=8, loc='center')
     plt.savefig(save_path)
     plt.close()
 
