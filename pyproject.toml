@@ -1,13 +1,12 @@
 [project]
 name = "vae-medmnist"
-version = "1.2.0"
+version = "1.3.0"
 description = "VAE implementation for the MedMNIST dataset. Part of the project for the course 'Deep Generative Models' at TU Darmstadt."
 authors = [
     { name = "Pascal Kraus", email = "pascal.kraus@stud.tu-darmstadt.de" }
 ]
 dependencies = [
     "medmnist>=3.0.1",
-    "jupyter>=1.0.0",
     "ruff>=0.4.9",
     "lightning>=2.2.5",
     "matplotlib>=3.9.0",
@@ -15,6 +14,7 @@ dependencies = [
     "torch==2.3.1+cu121",
     "torchvision==0.18.1+cu121",
     "torchaudio==2.3.1+cu121",
+    "notebook>=7.0.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
