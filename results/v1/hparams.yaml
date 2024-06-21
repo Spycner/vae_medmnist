@@ -2,7 +2,7 @@ batch_size: 32
 checkpoint_dir: results/v1/
 config: null
 data_dir: .
-dataset: tissuemnist
+datasets: tissuemnist
 enc_out_dim: 512
 first_conv: false
 input_height: 28

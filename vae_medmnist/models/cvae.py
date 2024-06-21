@@ -151,10 +151,9 @@ class CVAE(pl.LightningModule):
 
     def sample(self, num_samples: int, class_idx: int, device=None):
         device = device or self.device
-        y_onehot = one_hot(class_idx, self.num_classes)
-        z = torch.randn(num_samples, self.latent_dim).to(device)
-
-        z = torch.cat([z, y_onehot], dim=1)
+        y_flat = torch.tensor([class_idx], dtype=torch.int64)
+        y_onehot = one_hot(y_flat, self.num_classes)
+        z = torch.randn(num_samples, self.latent_dim, device=device)
 
         return self.decode(z, y_onehot)
 

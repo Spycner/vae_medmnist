@@ -50,50 +50,94 @@ def save_metrics_plot(metrics, save_path):
     plt.close()
 
 
-def save_generated_images(model, num_samples, device, save_path):
+def save_generated_images(model, dataloader, num_samples, device, save_path):
     """Save generated images from the model to the specified path."""
     model.eval()
+    samples = []
+    labels = []
+
     with torch.no_grad():
-        samples = model.sample(num_samples, device)
+        if isinstance(model, CVAE):
+            for class_idx in range(model.num_classes):
+                num_samples_per_class = max(1, num_samples // model.num_classes)
+                class_samples = model.sample(num_samples_per_class, class_idx, device)
+                samples.append(class_samples)
+                labels.extend([class_idx] * num_samples_per_class)
+            samples = torch.cat(samples, dim=0)
+        else:
+            samples = model.sample(num_samples, device)
 
-    if num_samples % 2 == 0:
-        fig, axs = plt.subplots(2, num_samples // 2, figsize=(15, 3))
-    else:
-        fig, axs = plt.subplots(1, num_samples, figsize=(15, 3))
+    # Calculate the number of rows and columns for the grid
+    num_cols = min(5, len(samples))  # Maximum 5 columns
+    num_rows = (len(samples) - 1) // num_cols + 1
 
+    # Create a larger figure with more appropriate dimensions
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(3 * num_cols, 3 * num_rows))
     axs = axs.flatten()
 
-    for ax, img in zip(axs, samples):
+    for _, (ax, img, label) in enumerate(zip(axs, samples, labels)):
         ax.imshow(img.cpu().permute(1, 2, 0), cmap='gray')
         ax.axis('off')
+        ax.set_title(f'Class {label}\n{dataloader.labels[label]}', fontsize=8)
 
-    plt.suptitle('Generated Images')
-    plt.savefig(save_path)
+    # Remove any unused subplots
+    for i in range(len(samples), len(axs)):
+        fig.delaxes(axs[i])
+
+    plt.tight_layout()
+    plt.suptitle('Generated Images', fontsize=16, y=1.02)
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
 
 
-def save_reconstructions(model, dataloader, device, save_path):
-    """Save reconstructions of the first batch of images from the dataloader to the specified path."""
+def save_reconstructions(model, dataloader, device, save_path, descriptions):
+    """Save reconstructions of images from each class in the dataloader to the specified path."""
     model.eval()
-    inputs, _ = next(iter(dataloader))
-    inputs = inputs.to(device)
+    class_samples = {}
+
+    # Collect one sample from each class
+    for inputs, labels in dataloader:
+        for input, label in zip(inputs, labels):
+            label = label.item()
+            if label not in class_samples:
+                class_samples[label] = input
+            if len(class_samples) == model.num_classes:
+                break
+        if len(class_samples) == model.num_classes:
+            break
+
+    inputs = torch.stack(list(class_samples.values())).to(device)
+    labels = torch.tensor(list(class_samples.keys())).to(device)
+
     with torch.no_grad():
-        if isinstance(model, ResNetVAE):
+        if isinstance(model, CVAE):
+            reconstructions, _, _ = model(inputs, labels)
+        elif isinstance(model, ResNetVAE):
             _, reconstructions, _, _ = model(inputs)
         elif isinstance(model, VAE):
             reconstructions, _, _ = model(inputs)
         else:
             raise NotImplementedError('Model type not supported for reconstructions.')
 
-    fig, axs = plt.subplots(2, 10, figsize=(15, 3))
-    for i in range(10):
-        axs[0, i].imshow(inputs[i].permute(1, 2, 0).cpu(), cmap='gray')
-        axs[0, i].axis('off')
-        axs[0, i].set_title('Input', fontsize=8, loc='center')
-        axs[1, i].imshow(reconstructions[i].permute(1, 2, 0).cpu(), cmap='gray')
-        axs[1, i].axis('off')
-        axs[1, i].set_title('Reconstruction', fontsize=8, loc='center')
-    plt.savefig(save_path)
+    # Calculate the number of rows and columns for the grid
+    num_rows = len(class_samples)
+
+    fig, axs = plt.subplots(num_rows, 2, figsize=(6, 3 * num_rows))
+
+    for i, (input, reconstruction) in enumerate(zip(inputs, reconstructions)):
+        # Original image
+        axs[i, 0].imshow(input.permute(1, 2, 0).cpu(), cmap='gray')
+        axs[i, 0].axis('off')
+        axs[i, 0].set_title(f'Input\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+
+        # Reconstructed image
+        axs[i, 1].imshow(reconstruction.permute(1, 2, 0).cpu(), cmap='gray')
+        axs[i, 1].axis('off')
+        axs[i, 1].set_title(f'Reconstruction\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+
+    plt.tight_layout()
+    plt.suptitle('Original and Reconstructed Images', fontsize=16, y=1.02)
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
     plt.close()
 
 
@@ -105,7 +149,9 @@ if __name__ == '__main__':
     import yaml
     from medmnist.dataset import TissueMNIST
 
-    from vae_medmnist.datamodules.medmnist_datamodule import MedMNISTDataModule
+    from vae_medmnist.dataloader.accumulated_dataset import AccumulatedMedMNIST
+    from vae_medmnist.dataloader.medmnist_datamodule import MedMNISTDataModule
+    from vae_medmnist.models.cvae import CVAE
     from vae_medmnist.models.resnet_vae import ResNetVAE
     from vae_medmnist.models.vae import VAE
 
@@ -124,20 +170,34 @@ if __name__ == '__main__':
 
     if hparams['model'] == 'resnet_vae':
         model = ResNetVAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
+    elif hparams['model'] == 'cvae':
+        model = CVAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/cvae-best-checkpoint.ckpt")
     else:
         model = VAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
     model.to(args.device)
 
-    if hparams['dataset'] == 'tissuemnist':
+    if hparams['datasets'] == 'tissuemnist':
         datasetclass = TissueMNIST
+        datamodule = MedMNISTDataModule(datasetclass, batch_size=10)
+    elif isinstance(hparams['datasets'], list):
+        datamodule = AccumulatedMedMNIST(hparams['datasets'], batch_size=10)
     else:
-        raise ValueError(f"Unknown dataset: {hparams['dataset']}")
+        raise ValueError(f"Unknown dataset: {hparams['datasets']}")
 
-    datamodule = MedMNISTDataModule(datasetclass, batch_size=10)
     datamodule.setup()
 
     save_metrics_plot(metrics_df, args.log_path)
-    save_generated_images(model, args.num_samples, args.device, os.path.join(args.log_path, 'generated_images.png'))
+    save_generated_images(
+        model,
+        datamodule,
+        args.num_samples,
+        args.device,
+        os.path.join(args.log_path, 'generated_images.png'),
+    )
     save_reconstructions(
-        model, datamodule.test_dataloader(), args.device, os.path.join(args.log_path, 'reconstructions.png')
+        model,
+        datamodule.test_dataloader(),
+        args.device,
+        os.path.join(args.log_path, 'reconstructions.png'),
+        datamodule.labels,
     )

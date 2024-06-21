@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from vae_medmnist.datamodules.medmnist_datamodule import MedMNISTDataModule
+from vae_medmnist.dataloader.medmnist_datamodule import MedMNISTDataModule
 from vae_medmnist.models.components import resnet18_decoder, resnet18_encoder
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')

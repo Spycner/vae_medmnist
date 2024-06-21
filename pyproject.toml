@@ -1,6 +1,6 @@
 [project]
 name = "vae-medmnist"
-version = "1.3.0"
+version = "2.0.0"
 description = "VAE implementation for the MedMNIST dataset. Part of the project for the course 'Deep Generative Models' at TU Darmstadt."
 authors = [
     { name = "Pascal Kraus", email = "pascal.kraus@stud.tu-darmstadt.de" }

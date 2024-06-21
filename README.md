@@ -17,6 +17,7 @@
   - [Results](#results)
     - [Version 1](#version-1)
     - [Version 2](#version-2)
+    - [Version 3](#version-3)
   - [Contributing](#contributing)
   - [Citations](#citations)
 
@@ -27,7 +28,8 @@ This repository contains the implementation of a Variational Autoencoder (VAE) t
 ### Features
 
 - **Variational Autoencoder Architecture**: Implements a VAE with customizable encoder and decoder components.
-- **Conditional VAEs and Disentanglement**: Supports experiments with conditional VAEs and disentanglement to explore different generative model capabilities. _(#NotImplemented)_
+- **Conditional VAEs**: Supports experiments with conditional VAEs to explore different generative model capabilities.
+- **Disentanglement**: Explores the capabilities of VAEs in disentangling latent representations of different modalities. _(#NotImplemented)_
 - **PyTorch Lightning Integration**: Leverages PyTorch Lightning for scalable and efficient model training and evaluation.
 - **Comprehensive Evaluation and Visualization**: Includes scripts for detailed evaluation metrics and generation of visual outputs to assess model performance.
 
@@ -35,7 +37,7 @@ This repository contains the implementation of a Variational Autoencoder (VAE) t
 
 - `vae_medmnist/`: Contains the installable package.
   - `models/`: Contains the VAE model definitions including encoder and decoder modules.
-  - `datamodules/`: Data handling modules for loading and preprocessing the MedMNIST dataset.
+  - `dataloader/`: Data handling modules for loading and preprocessing the MedMNIST dataset. Or a custom dataloader for the combined datasets.
   - `evaluation/`: Scripts for model evaluation, including loss metrics and image generation.
 - `config/`: Configuration files for model training parameters and settings.
 - `results/`: Folder for storing results.
@@ -50,7 +52,7 @@ To install the necessary components for running this project, follow these steps
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/your-repository/vae-medmnist.git
+   git clone https://github.com/Spycner/vae-medmnist.git
    cd vae-medmnist
    ```
 
@@ -77,10 +79,10 @@ These steps will set up the environment with all the necessary dependencies and 
 To quickly start using the VAE model for training and evaluation, follow these [install](#installation) instructions above first.
 
 **Run the Training:**
-To start training the model, use the command-line interface provided in the `resnet_vae.py` script. You need to specify the [configuration file](#configuration) which includes all the necessary parameters:
+To start training the model, use the command-line interface provided in the models script. You need to specify the [configuration file](#configuration) which includes all the necessary parameters:
 
 ```bash
-python vae_medmnist/models/resnet_vae.py --config config/config.yaml
+python vae_medmnist/models/vae.py --config config/config.yaml
 ```
 
 **Monitor Training:**
@@ -120,10 +122,10 @@ batch_size: 32
 
 ### Viewing Available Configuration Options
 
-To view all available configuration options for the model, you can use the help functionality provided by the `argparse` module in the `resnet_vae.py` script. Run the following command to see the options:
+To view all available configuration options for the model, you can use the help functionality provided by the `argparse` module in the models script. Run the following command to see the options:
 
 ```bash
-python vae_medmnist/models/resnet_vae.py --help
+python vae_medmnist/models/{}vae.py --help
 ```
 
 Similarly, for evaluation-related configurations, refer to the `evaluation.py` script:
@@ -141,6 +143,8 @@ The results section provides insights into the performance and output of the exp
 ### [Version 1](/results/v1/description.md)
 
 ### [Version 2](/results/v2/description.md)
+
+### [Version 3](/results/v3/description.md)
 
 ## Contributing
 
