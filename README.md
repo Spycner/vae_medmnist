@@ -140,11 +140,11 @@ These commands will display all the command-line arguments that can be set in th
 
 The results section provides insights into the performance and output of the experiments conducted using different configuration files.
 
-### [Version 1](/results/v1/description.md)
+### [Version 1](/results/v1/README.md)
 
-### [Version 2](/results/v2/description.md)
+### [Version 2](/results/v2/README.md)
 
-### [Version 3](/results/v3/description.md)
+### [Version 3](/results/v3/README.md)
 
 ## Contributing
 
