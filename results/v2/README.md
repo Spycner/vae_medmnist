@@ -35,10 +35,10 @@ The training loss decreased steadily, indicating that the model was learning eff
 ![Validation Loss Plot](val_losses.png)  
 The validation loss mirrored the training loss, suggesting that the model was generalizing well to unseen data.
 
-### KL Divergence
+### Train vs. Val Loss
 
-![KL Divergence Plot](loss_comparison.png)  
-The KL divergence plot shows how the model's latent space regularization evolved during training.
+![Train vs. Val Loss Plot](loss_comparison.png)  
+The train vs. val loss plot shows how the model's loss evolved during training.
 
 ### Visual Outputs
 

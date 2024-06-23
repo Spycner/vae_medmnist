@@ -29,15 +29,20 @@ num_workers: 8
 
 The training process was monitored using various metrics. The plots generated from these metrics can be found in the logs directory.
 
-### Training and Validation Loss
+### Training Loss
 
-![Training and Validation Loss](loss_comparison.png)
-This plot shows the training and validation losses over epochs. The steady decrease in both losses indicates effective learning and good generalization to unseen data.
+![Training Loss Plot](train_losses.png)  
+The training loss decreased steadily, indicating that the model was learning effectively over the epochs.
 
-### KL Divergence
+### Validation Loss
 
-![KL Divergence](kl_divergence.png)
-The KL divergence plot demonstrates how the model's latent space regularization evolved during training.
+![Validation Loss Plot](val_losses.png)  
+The validation loss mirrored the training loss, suggesting that the model was generalizing well to unseen data.
+
+### Train vs. Val Loss
+
+![Train vs. Val Loss Plot](loss_comparison.png)  
+The train vs. val loss plot shows how the model's loss evolved during training.
 
 ## Visual Outputs
 
