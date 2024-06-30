@@ -6,4 +6,4 @@ kl_coeff: 0.00025
 lr: 0.005
 checkpoint_dir: results/checkpoints/vae
 log_dir: results/logs
-mo
+model: BetaVAE
