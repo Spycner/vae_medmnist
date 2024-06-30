@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
     import pandas as pd
     import yaml
-    from medmnist.dataset import TissueMNIST
+    from medmnist.dataset import TissueMNIST, ChestMNIST
 
     from vae_medmnist.dataloader.accumulated_dataset import AccumulatedMedMNIST
     from vae_medmnist.dataloader.medmnist_datamodule import MedMNISTDataModule
