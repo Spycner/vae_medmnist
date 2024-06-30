@@ -113,75 +113,6 @@ class DecoderBlock(nn.Module):
 
         return out
 
-class BetaEncoderBlock(nn.Module):
-    """Beta Encoder block for a VAE architecture."""
-
-    expansion = 2  # Assuming a higher expansion for Beta VAE
-
-    def __init__(self, in_planes, planes, stride=1, downsample=None):
-        super(BetaEncoderBlock, self).__init__()
-        self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(planes, planes * self.expansion, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes * self.expansion)
-        self.downsample = downsample
-        self.stride = stride
-
-    def forward(self, x):
-        identity = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-        if self.downsample is not None:
-            identity = self.downsample(x)
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-    
-
-class BetaDecoderBlock(nn.Module):
-    """Beta Decoder block for a VAE architecture."""
-
-    expansion = 2  # Assuming a higher expansion for Beta VAE
-
-    def __init__(self, in_planes, planes, scale=1, upsample=None):
-        super(BetaDecoderBlock, self).__init__()
-        self.conv1 = nn.ConvTranspose2d(in_planes, planes, kernel_size=3, stride=scale, padding=1, output_padding=scale-1, bias=False)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = nn.ConvTranspose2d(planes, planes * self.expansion, kernel_size=3, stride=1, padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes * self.expansion)
-        self.upsample = upsample
-        self.scale = scale
-
-    def forward(self, x):
-        identity = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
-
-        if self.upsample is not None:
-            identity = self.upsample(x)
-
-        out += identity
-        out = self.relu(out)
-
-        return out
-
-
-
 class ResNetEncoder(nn.Module):
     """ResNet encoder module."""
 
@@ -315,101 +246,6 @@ class ResNetDecoder(nn.Module):
         return x
     
 
-class BetaEncoder(nn.Module):
-    def __init__(self, block, layers, first_conv, maxpool1):
-        super(BetaEncoder, self).__init__()
-        self.inplanes = 64
-        self.first_conv = first_conv
-        self.maxpool1 = maxpool1
-
-        if self.first_conv:
-            self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
-            self.bn1 = nn.BatchNorm2d(self.inplanes)
-            self.relu = nn.ReLU(inplace=True)
-            self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-
-    def _make_layer(self, block, planes, blocks, stride=1):
-        downsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
-
-        layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample))
-        self.inplanes = planes * block.expansion
-        for _ in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
-
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        if self.first_conv:
-            x = self.conv1(x)
-            x = self.bn1(x)
-            x = self.relu(x)
-            if self.maxpool1:
-                x = self.maxpool(x)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        return x
-
-
-class BetaDecoder(nn.Module):
-    def __init__(self, block, layers, latent_dim, input_height, first_conv, maxpool1):
-        super(BetaDecoder, self).__init__()
-        self.inplanes = 64
-        self.first_conv = first_conv
-        self.maxpool1 = maxpool1
-        self.latent_dim = latent_dim
-
-        self.linear = nn.Linear(latent_dim, 512 * block.expansion * 4 * 4)
-
-        self.layer1 = self._make_layer(block, 512, layers[0])
-        self.layer2 = self._make_layer(block, 256, layers[1])
-        self.layer3 = self._make_layer(block, 128, layers[2])
-        self.layer4 = self._make_layer(block, 64, layers[3])
-
-        self.deconv1 = nn.ConvTranspose2d(64 * block.expansion, 3, kernel_size=7, stride=2, padding=3, output_padding=1, bias=False)
-
-    def _make_layer(self, block, planes, blocks, stride=1):
-        upsample = None
-        if stride != 1 or self.inplanes != planes * block.expansion:
-            upsample = nn.Sequential(
-                nn.ConvTranspose2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, output_padding=stride-1, bias=False),
-                nn.BatchNorm2d(planes * block.expansion),
-            )
-
-        layers = []
-        layers.append(block(self.inplanes, planes, stride, upsample))
-        self.inplanes = planes * block.expansion
-        for _ in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
-
-        return nn.Sequential(*layers)
-
-    def forward(self, x):
-        x = self.linear(x)
-        x = x.view(-1, 512 * block.expansion, 4, 4)
-
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
-
-        x = self.deconv1(x)
-        return x
-
 
 
 def resnet18_encoder(first_conv, maxpool1):
@@ -421,10 +257,4 @@ def resnet18_decoder(latent_dim, input_height, first_conv, maxpool1):
     """Create a ResNet18 decoder."""
     return ResNetDecoder(DecoderBlock, [2, 2, 2, 2], latent_dim, input_height, first_conv, maxpool1)
 
-def betavae_encoder(first_conv, maxpool1):
-    """Create a Betavae encoder."""
-    return BetaEncoder(BetaEncoderBlock, [2, 2, 2, 2], first_conv, maxpool1)
 
-def betavae_decoder(latent_dim, input_height, first_conv, maxpool1):
-    """Create a BetaVAE decoder."""
-    return BetaDecoder(BetaDecoderBlock, [2, 2, 2, 2], latent_dim, input_height, first_conv, maxpool1)

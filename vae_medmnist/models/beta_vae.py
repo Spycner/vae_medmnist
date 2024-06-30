@@ -1,154 +1,140 @@
+"""model.py"""
 import logging
 from argparse import ArgumentParser
 
-import pytorch_lightning as pl
 import torch
+import pytorch_lightning as pl
 import torch.nn as nn
-import torch.nn.functional as F
+#import torch.nn.functional as F
+import torch.nn.init as init
+from torch.autograd import Variable
 
 from vae_medmnist.dataloader.medmnist_datamodule import MedMNISTDataModule
-from vae_medmnist.models.components import betavae_encoder, betavae_decoder  # Import the new functions
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class BetaVAE(pl.LightningModule):
-    """BetaVAE model class."""
+def reparametrize(mu, logvar):
+    std = logvar.div(2).exp()
+    eps = Variable(std.data.new(std.size()).normal_())
+    return mu + std*eps
 
-    num_iter = 0  # Global static variable to keep track of iterations
 
-    def __init__(
-        self,
-        in_channels: int = 3,
-        input_height: int = 32,
-        lr: float = 1e-4,
-        kl_coeff: float = 1.0,  # Typically beta is represented as kl_coeff
-        enc_out_dim: int = 512,
-        latent_dim: int = 256,
-        hidden_dims: list = None,
-        beta: int = 4,
-        gamma: float = 1000.,
-        max_capacity: int = 25,
-        Capacity_max_iter: int = 1e5,
-        loss_type: str = 'B',
-        first_conv: bool = False,
-        maxpool1: bool = False,
-        **kwargs,
-    ):
-        """Initialize the BetaVAE model."""
-        super().__init__()
+class View(nn.Module):
+    def __init__(self, size):
+        super(View, self).__init__()
+        self.size = size
 
+    def forward(self, tensor):
+        return tensor.view(self.size)
+
+
+class BetaVAE_H(pl.LightningModule):
+    """Model proposed in original beta-VAE paper(Higgins et al, ICLR, 2017)."""
+
+    def __init__(self, z_dim=10, nc=3):
+        super(BetaVAE_H, self).__init__()
         self.save_hyperparameters()
-        self.lr = lr
-        self.kl_coeff = kl_coeff
-        self.enc_out_dim = enc_out_dim
-        self.latent_dim = latent_dim
-        self.beta = beta
-        self.gamma = gamma
-        self.loss_type = loss_type
-        self.C_max = torch.Tensor([max_capacity])
-        self.C_stop_iter = Capacity_max_iter
+        self.z_dim = z_dim
+        self.nc = nc
+        self.encoder = nn.Sequential(
+            nn.Conv2d(nc, 32, 4, 2, 1),          # B,  32, 32, 32
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 4, 2, 1),          # B,  32, 16, 16
+            nn.ReLU(True),
+            nn.Conv2d(32, 64, 4, 2, 1),          # B,  64,  8,  8
+            nn.ReLU(True),
+            nn.Conv2d(64, 64, 4, 2, 1),          # B,  64,  4,  4
+            nn.ReLU(True),
+            nn.Conv2d(64, 256, 4, 1),            # B, 256,  1,  1
+            nn.ReLU(True),
+            View((-1, 256*1*1)),                 # B, 256
+            nn.Linear(256, z_dim*2),             # B, z_dim*2
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(z_dim, 256),               # B, 256
+            View((-1, 256, 1, 1)),               # B, 256,  1,  1
+            nn.ReLU(True),
+            nn.ConvTranspose2d(256, 64, 4),      # B,  64,  4,  4
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 64, 4, 2, 1), # B,  64,  8,  8
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 32, 4, 2, 1), # B,  32, 16, 16
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32, 32, 32
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, nc, 4, 2, 1),  # B, nc, 64, 64
+        )
 
-        self.encoder = betavae_encoder(first_conv, maxpool1)
-        self.decoder = betavae_decoder(self.latent_dim, self.hparams.input_height, first_conv, maxpool1)
+        self.weight_init()
 
-        self.fc_mu = nn.Linear(self.enc_out_dim, self.latent_dim)
-        self.fc_var = nn.Linear(self.enc_out_dim, self.latent_dim)
+    def weight_init(self):
+        for block in self._modules:
+            for m in self._modules[block]:
+                kaiming_init(m)
 
-    def encode(self, input: torch.Tensor) -> [torch.Tensor, torch.Tensor]:
-        result = self.encoder(input)
-        result = torch.flatten(result, start_dim=1)
-        mu = self.fc_mu(result)
-        log_var = self.fc_var(result)
-        return [mu, log_var]
+    def forward(self, x):
+        distributions = self._encode(x)
+        mu = distributions[:, :self.z_dim]
+        logvar = distributions[:, self.z_dim:]
+        z = reparametrize(mu, logvar)
+        x_recon = self._decode(z)
 
-    def decode(self, z: torch.Tensor) -> torch.Tensor:
-        result = self.decoder(z)
-        return result
+        return x_recon, mu, logvar
 
-    def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return eps * std + mu
+    def _encode(self, x):
+        return self.encoder(x)
 
-    def forward(self, input: torch.Tensor, **kwargs) -> [torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        mu, log_var = self.encode(input)
-        z = self.reparameterize(mu, log_var)
-        return [self.decode(z), input, mu, log_var]
-
-    def training_step(self, batch, batch_idx):
-        x, _ = batch
-        recons, input, mu, log_var = self(x)
-        loss_dict = self.loss_function(recons, input, mu, log_var, M_N=1.0)  # Set M_N to 1.0 for now
-        self.log('train_loss', loss_dict['loss'])
-        return loss_dict['loss']
-
-    def validation_step(self, batch, batch_idx):
-        x, _ = batch
-        recons, input, mu, log_var = self(x)
-        loss_dict = self.loss_function(recons, input, mu, log_var, M_N=1.0)  # Set M_N to 1.0 for now
-        self.log('val_loss', loss_dict['loss'])
-
-    def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.lr)
-
-    def loss_function(self,
-                      *args,
-                      **kwargs) -> dict:
-        self.num_iter += 1
-        recons = args[0]
-        input = args[1]
-        mu = args[2]
-        log_var = args[3]
-        kld_weight = kwargs['M_N']  # Account for the minibatch samples from the dataset
-
-        recons_loss = F.mse_loss(recons, input)
-
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
-
-        if self.loss_type == 'H':
-            loss = recons_loss + self.beta * kld_weight * kld_loss
-        elif self.loss_type == 'B':
-            self.C_max = self.C_max.to(input.device)
-            C = torch.clamp(self.C_max / self.C_stop_iter * self.num_iter, 0, self.C_max.data[0])
-            loss = recons_loss + self.gamma * kld_weight * (kld_loss - C).abs()
-        else:
-            raise ValueError('Undefined loss type.')
-
-        return {'loss': loss, 'Reconstruction_Loss': recons_loss, 'KLD': kld_loss}
-
-    def sample(self,
-               num_samples: int,
-               current_device: int, **kwargs) -> torch.Tensor:
-        z = torch.randn(num_samples, self.latent_dim)
-        z = z.to(current_device)
-        samples = self.decode(z)
-        return samples
-
-    def generate(self, x: torch.Tensor, **kwargs) -> torch.Tensor:
-        return self.forward(x)[0]
-
-    @staticmethod
+    def _decode(self, z):
+        return self.decoder(z)
+    
+          
     def add_model_specific_args(parent_parser):
-        parser = parent_parser.add_argument_group("BetaVAE")
-        parser.add_argument('--in_channels', type=int, default=3)
-        parser.add_argument('--input_height', type=int, default=32)
-        parser.add_argument('--lr', type=float, default=1e-4)
-        parser.add_argument('--kl_coeff', type=float, default=1.0)
-        parser.add_argument('--enc_out_dim', type=int, default=512)
-        parser.add_argument('--latent_dim', type=int, default=256)
-        parser.add_argument('--hidden_dims', type=list, default=[32, 64, 128, 256, 512])
-        parser.add_argument('--beta', type=int, default=4)
-        parser.add_argument('--gamma', type=float, default=1000.0)
-        parser.add_argument('--max_capacity', type=int, default=25)
-        parser.add_argument('--Capacity_max_iter', type=int, default=1e5)
-        parser.add_argument('--loss_type', type=str, default='B')
+        """Add model-specific arguments to the parser."""
+        parser = ArgumentParser(parents=[parent_parser], add_help=False)
+
         parser.add_argument('--first_conv', action='store_true')
         parser.add_argument('--maxpool1', action='store_true')
-        return parent_parser
+        parser.add_argument('--lr', type=float, default=1e-4)
 
+        parser.add_argument(
+            '--enc_out_dim',
+            type=int,
+            default=512,
+            help='512 for resnet18',
+        )
+        parser.add_argument('--kl_coeff', type=float, default=0.1)
+        parser.add_argument('--latent_dim', type=int, default=256)
+
+        parser.add_argument('--batch_size', type=int, default=256)
+        parser.add_argument('--num_workers', type=int, default=8)
+
+    
+  
+
+def kaiming_init(m):
+    if isinstance(m, (nn.Linear, nn.Conv2d)):
+        init.kaiming_normal(m.weight)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
+    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
+        m.weight.data.fill_(1)
+        if m.bias is not None:
+            m.bias.data.fill_(0)
+
+
+def normal_init(m, mean, std):
+    if isinstance(m, (nn.Linear, nn.Conv2d)):
+        m.weight.data.normal_(mean, std)
+        if m.bias.data is not None:
+            m.bias.data.zero_()
+    elif isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
+        m.weight.data.fill_(1)
+        if m.bias.data is not None:
+            m.bias.data.zero_()
 
 def cli_main(args=None):
+    """Main function for command-line interface."""
     import yaml
     from medmnist.dataset import TissueMNIST
     from pytorch_lightning.callbacks import ModelCheckpoint
@@ -159,11 +145,13 @@ def cli_main(args=None):
 
     args, unknown = parser.parse_known_args(args)
 
+    # Load configuration from a YAML file
     with open(args.config) as file:
         config = yaml.safe_load(file)
         logger.debug(f'Loaded configuration: {config}')
 
-    parser = BetaVAE.add_model_specific_args(parser)
+    # Update parser with options from the config file
+    parser = BetaVAE_H.add_model_specific_args(parser)
     parser.set_defaults(**config)
     args = parser.parse_args(unknown)
 
@@ -175,8 +163,9 @@ def cli_main(args=None):
     datamodule = MedMNISTDataModule(dataset_class, **args.__dict__)
     args.input_height = datamodule.size
 
-    model = BetaVAE(**args.__dict__)
+    model = BetaVAE_H(**args.__dict__)
 
+    # Setup model checkpointing
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.checkpoint_dir,
         filename='best-checkpoint',
@@ -186,6 +175,7 @@ def cli_main(args=None):
         mode='min',
     )
 
+    # Setup CSV logging
     csv_logger = CSVLogger(save_dir=args.log_dir, name='training_logs')
 
     trainer = pl.Trainer(max_epochs=args.max_epochs, callbacks=[checkpoint_callback], logger=csv_logger)
