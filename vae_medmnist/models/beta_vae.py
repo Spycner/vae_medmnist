@@ -191,7 +191,7 @@ def cli_main(args=None):
         logger.debug(f'Loaded configuration: {config}')
 
     # Update parser with options from the config file
-    parser = VAE.add_model_specific_args(parser)
+    parser = BetaVAE.add_model_specific_args(parser)
     parser.set_defaults(**config)
     args = parser.parse_args(unknown)
 
@@ -207,12 +207,12 @@ def cli_main(args=None):
     datamodule = MedMNISTDataModule(dataset_class, **args.__dict__)
     args.input_channels = INFO[args.dataset]['n_channels']
 
-    model = VAE(**args.__dict__)
+    model = BetaVAE(**args.__dict__)
 
     # Setup model checkpointing
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.checkpoint_dir,
-        filename='vae-best-checkpoint',
+        filename='betavae-best-checkpoint',
         save_top_k=1,
         verbose=True,
         monitor='val_loss',
