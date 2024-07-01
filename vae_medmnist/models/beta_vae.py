@@ -1,142 +1,182 @@
-"""model.py"""
 import logging
 from argparse import ArgumentParser
+from typing import List
 
-import torch
 import pytorch_lightning as pl
+import torch
 import torch.nn as nn
-#import torch.nn.functional as F
-import torch.nn.init as init
-from torch.autograd import Variable
+import torch.nn.functional as F
 
 from vae_medmnist.dataloader.medmnist_datamodule import MedMNISTDataModule
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s')
 logger = logging.getLogger(__name__)
 
-def reparametrize(mu, logvar):
-    std = logvar.div(2).exp()
-    eps = Variable(std.data.new(std.size()).normal_())
-    return mu + std*eps
 
+class BetaVAE(pl.LightningModule):
+    """BetaVAE model class."""
 
-class View(nn.Module):
-    def __init__(self, size):
-        super(View, self).__init__()
-        self.size = size
-
-    def forward(self, tensor):
-        return tensor.view(self.size)
-
-
-class BetaVAE_H(pl.LightningModule):
-    """Model proposed in original beta-VAE paper(Higgins et al, ICLR, 2017)."""
-
-    def __init__(self, z_dim=10, nc=3):
-        super(BetaVAE_H, self).__init__()
+    def __init__(
+        self,
+        input_channels: int = 1,
+        lr: float = 1e-4,
+        kl_coeff: float = 0.1,
+        hidden_channels: List = None,
+        latent_dim: int = 256,
+        beta: int = 4,
+        **kwargs,  # noqa: ARG002
+    ):
+        """Initialize the BetaVAE model."""
+        super().__init__()
         self.save_hyperparameters()
-        self.z_dim = z_dim
-        self.nc = nc
+        self.input_channels = input_channels
+        self.lr = lr
+        self.kl_coeff = kl_coeff
+        self.hidden_channels = hidden_channels
+        self.latent_dim = latent_dim
+        self.beta = beta 
+
+        if self.hidden_channels is None:
+            self.hidden_channels = [32, 64, 128, 256, 512]
+
         self.encoder = nn.Sequential(
-            nn.Conv2d(nc, 32, 4, 2, 1),          # B,  32, 32, 32
-            nn.ReLU(True),
-            nn.Conv2d(32, 32, 4, 2, 1),          # B,  32, 16, 16
-            nn.ReLU(True),
-            nn.Conv2d(32, 64, 4, 2, 1),          # B,  64,  8,  8
-            nn.ReLU(True),
-            nn.Conv2d(64, 64, 4, 2, 1),          # B,  64,  4,  4
-            nn.ReLU(True),
-            nn.Conv2d(64, 256, 4, 1),            # B, 256,  1,  1
-            nn.ReLU(True),
-            View((-1, 256*1*1)),                 # B, 256
-            nn.Linear(256, z_dim*2),             # B, z_dim*2
+            nn.Conv2d(self.input_channels, self.hidden_channels[0], kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(self.hidden_channels[0]),
+            nn.ReLU(),
+            *[
+                nn.Sequential(
+                    nn.Conv2d(self.hidden_channels[i], self.hidden_channels[i + 1], kernel_size=3, stride=2, padding=1),
+                    nn.BatchNorm2d(self.hidden_channels[i + 1]),
+                    nn.ReLU(),
+                )
+                for i in range(len(self.hidden_channels) - 1)
+            ],
         )
+
+        self.fc_mu = nn.Linear(self.hidden_channels[-1], self.latent_dim)
+        self.fc_logvar = nn.Linear(self.hidden_channels[-1], self.latent_dim)
+
+        self.hidden_channels = self.hidden_channels[::-1]
+
+        self.decoder_input = nn.Linear(self.latent_dim, self.hidden_channels[0] * 4)
+
         self.decoder = nn.Sequential(
-            nn.Linear(z_dim, 256),               # B, 256
-            View((-1, 256, 1, 1)),               # B, 256,  1,  1
-            nn.ReLU(True),
-            nn.ConvTranspose2d(256, 64, 4),      # B,  64,  4,  4
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 64, 4, 2, 1), # B,  64,  8,  8
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 32, 4, 2, 1), # B,  32, 16, 16
-            nn.ReLU(True),
-            nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32, 32, 32
-            nn.ReLU(True),
-            nn.ConvTranspose2d(32, nc, 4, 2, 1),  # B, nc, 64, 64
+            *[
+                nn.Sequential(  # 3, 5, 9, 17
+                    nn.ConvTranspose2d(
+                        self.hidden_channels[i],
+                        self.hidden_channels[i + 1],
+                        kernel_size=3,
+                        stride=2,
+                        padding=1,
+                        output_padding=1,
+                    ),
+                    nn.BatchNorm2d(self.hidden_channels[i + 1]),
+                    nn.ReLU(),
+                )
+                for i in range(len(self.hidden_channels) - 1)
+            ],
+            nn.ConvTranspose2d(self.hidden_channels[-1], self.hidden_channels[-1], kernel_size=3, stride=2, padding=4),
+            nn.BatchNorm2d(self.hidden_channels[-1]),
+            nn.ReLU(),
+            nn.Conv2d(self.hidden_channels[-1], self.input_channels, kernel_size=3, stride=2),
+            nn.Tanh(),
         )
-
-        self.weight_init()
-
-    def weight_init(self):
-        for block in self._modules:
-            for m in self._modules[block]:
-                kaiming_init(m)
 
     def forward(self, x):
-        distributions = self._encode(x)
-        mu = distributions[:, :self.z_dim]
-        logvar = distributions[:, self.z_dim:]
-        z = reparametrize(mu, logvar)
-        x_recon = self._decode(z)
+        """Forward pass through the model."""
+        x = self.encoder(x)
+        res = torch.flatten(x, start_dim=1)
 
-        return x_recon, mu, logvar
+        mu = self.fc_mu(res)
+        logvar = self.fc_logvar(res)
 
-    def _encode(self, x):
-        return self.encoder(x)
+        z = self.reparameterize(mu, logvar)
 
-    def _decode(self, z):
-        return self.decoder(z)
-    
-          
+        return (
+            self.decode(z),
+            mu,
+            logvar,
+        )
+
+    def decode(self, x):
+        """Decode the latent variables."""
+        decoder_input = self.decoder_input(x)
+        decoder_input = decoder_input.view(-1, self.hidden_channels[0], 2, 2)
+
+        return self.decoder(decoder_input)
+
+    def reparameterize(self, mu, logvar):
+        """Reparameterize the latent variables."""
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        z = mu + eps * std
+
+        return z
+
+    def step(self, batch, batch_idx):  # noqa: ARG002
+        """Perform a single optimization step."""
+        x, y = batch
+        x_hat, mu, logvar = self(x)
+
+        recon_loss = F.mse_loss(x_hat, x)
+        
+        kl = torch.mean(-0.5 * torch.sum(1 + logvar - mu**2 - torch.exp(logvar), dim=1), dim=0)
+        kl *= self.kl_coeff * self.beta
+        loss = recon_loss + kl
+
+        logs = {
+            'recon_loss': recon_loss,
+            'kl': kl,
+            'loss': loss,
+        }
+
+        return loss, logs
+
+    def training_step(self, batch, batch_idx):
+        """Perform a single training step."""
+        loss, logs = self.step(batch, batch_idx)
+        self.log_dict({f'train_{k}': v for k, v in logs.items()}, on_step=True, on_epoch=False)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        """Perform a single validation step."""
+        loss, logs = self.step(batch, batch_idx)
+        self.log_dict({f'val_{k}': v for k, v in logs.items()})
+        return loss
+
+    def configure_optimizers(self):
+        """Configure the optimizers."""
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
+
+    def sample(self, num_samples=1, device=None):
+        """Sample new pictures from the VAE."""
+        device = device or self.device
+        z = torch.randn(num_samples, self.latent_dim, device=device)
+        samples = self.decode(z)
+        return samples
+
+    @staticmethod
     def add_model_specific_args(parent_parser):
         """Add model-specific arguments to the parser."""
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
 
-        parser.add_argument('--first_conv', action='store_true')
-        parser.add_argument('--maxpool1', action='store_true')
         parser.add_argument('--lr', type=float, default=1e-4)
 
-        parser.add_argument(
-            '--enc_out_dim',
-            type=int,
-            default=512,
-            help='512 for resnet18',
-        )
         parser.add_argument('--kl_coeff', type=float, default=0.1)
         parser.add_argument('--latent_dim', type=int, default=256)
 
         parser.add_argument('--batch_size', type=int, default=256)
         parser.add_argument('--num_workers', type=int, default=8)
 
-    
-  
+        return parser
 
-def kaiming_init(m):
-    if isinstance(m, (nn.Linear, nn.Conv2d)):
-        init.kaiming_normal(m.weight)
-        if m.bias is not None:
-            m.bias.data.fill_(0)
-    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
-        m.weight.data.fill_(1)
-        if m.bias is not None:
-            m.bias.data.fill_(0)
-
-
-def normal_init(m, mean, std):
-    if isinstance(m, (nn.Linear, nn.Conv2d)):
-        m.weight.data.normal_(mean, std)
-        if m.bias.data is not None:
-            m.bias.data.zero_()
-    elif isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
-        m.weight.data.fill_(1)
-        if m.bias.data is not None:
-            m.bias.data.zero_()
 
 def cli_main(args=None):
     """Main function for command-line interface."""
     import yaml
-    from medmnist.dataset import TissueMNIST
+    from medmnist import INFO
+    from medmnist.dataset import TissueMNIST, ChestMNIST, OCTMNIST
     from pytorch_lightning.callbacks import ModelCheckpoint
     from pytorch_lightning.loggers import CSVLogger
 
@@ -151,24 +191,28 @@ def cli_main(args=None):
         logger.debug(f'Loaded configuration: {config}')
 
     # Update parser with options from the config file
-    parser = BetaVAE_H.add_model_specific_args(parser)
+    parser = VAE.add_model_specific_args(parser)
     parser.set_defaults(**config)
     args = parser.parse_args(unknown)
 
     if args.dataset == 'tissuemnist':
         dataset_class = TissueMNIST
+    elif args.dataset == 'chestmnist':
+        dataset_class = ChestMNIST
+    elif args.dataset == 'octmnist':
+        dataset_class = OCTMNIST
     else:
         raise ValueError(f'Unknown dataset: {args.dataset}')
 
     datamodule = MedMNISTDataModule(dataset_class, **args.__dict__)
-    args.input_height = datamodule.size
+    args.input_channels = INFO[args.dataset]['n_channels']
 
-    model = BetaVAE_H(**args.__dict__)
+    model = VAE(**args.__dict__)
 
     # Setup model checkpointing
     checkpoint_callback = ModelCheckpoint(
         dirpath=args.checkpoint_dir,
-        filename='best-checkpoint',
+        filename='vae-best-checkpoint',
         save_top_k=1,
         verbose=True,
         monitor='val_loss',
