@@ -167,7 +167,7 @@ class BetaVAE(pl.LightningModule):
         parser.add_argument('--latent_dim', type=int, default=256)
 
         parser.add_argument('--batch_size', type=int, default=256)
-        parser.add_argument('--num_workers', type=int, default=8)
+        parser.add_argument('--num_workers', type=int, default=4)
 
         return parser
 

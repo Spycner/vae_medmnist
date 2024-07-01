@@ -1,5 +1,6 @@
-dataset: chestmnist
-max_epochs: 2
+dataset: tissuemnist
+max_epochs: 100
 checkpoint_dir: results/checkpoints/beta_vae
 log_dir: results/logs
 batch_size: 32
+model: beta_vae
