@@ -148,7 +148,7 @@ def cli_main(args=None):
         logger.debug(f'Loaded configuration: {config}')
 
     # Update parser with options from the config file
-    parser = ResNetVAE.add_model_specific_args(parser)
+    parser = betaVAEv2.add_model_specific_args(parser)
     parser.set_defaults(**config)
     args = parser.parse_args(unknown)
 
@@ -160,7 +160,7 @@ def cli_main(args=None):
     datamodule = MedMNISTDataModule(dataset_class, **args.__dict__)
     args.input_height = datamodule.size
 
-    model = ResNetVAE(**args.__dict__)
+    model = betaVAEv2(**args.__dict__)
 
     # Setup model checkpointing
     checkpoint_callback = ModelCheckpoint(
