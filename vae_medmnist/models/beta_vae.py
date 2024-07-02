@@ -24,6 +24,7 @@ class BetaVAE(pl.LightningModule):
         hidden_channels: List = None,
         latent_dim: int = 256,
         beta: int = 4,
+        num_classes: int = None,
         **kwargs,  # noqa: ARG002
     ):
         """Initialize the BetaVAE model."""
@@ -35,6 +36,7 @@ class BetaVAE(pl.LightningModule):
         self.hidden_channels = hidden_channels
         self.latent_dim = latent_dim
         self.beta = beta 
+        self.num_classes = num_classes
 
         if self.hidden_channels is None:
             self.hidden_channels = [32, 64, 128, 256, 512]

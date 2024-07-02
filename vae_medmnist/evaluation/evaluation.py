@@ -1,6 +1,14 @@
 import matplotlib.pyplot as plt
 import torch
 
+def get_labels(dataset_class):
+    """Retrieve labels from the dataset class."""
+    if hasattr(dataset_class, 'info'):
+        return dataset_class.info['label']
+    elif hasattr(dataset_class, 'labels'):
+        return dataset_class.labels  # Adapt this based on the actual attribute or method
+    raise AttributeError("Cannot find labels in the provided dataset class.")
+
 
 def save_metrics_plot(metrics, save_path):
     """Save plots of training and validation metrics to the specified path."""
@@ -116,6 +124,8 @@ def save_reconstructions(model, dataloader, device, save_path, descriptions):
             _, reconstructions, _, _ = model(inputs)
         elif isinstance(model, VAE):
             reconstructions, _, _ = model(inputs)
+        elif isinstance(model, BetaVAE):
+            reconstructions, _, _ = model(inputs)
         else:
             raise NotImplementedError('Model type not supported for reconstructions.')
 
@@ -128,12 +138,19 @@ def save_reconstructions(model, dataloader, device, save_path, descriptions):
         # Original image
         axs[i, 0].imshow(input.permute(1, 2, 0).cpu(), cmap='gray')
         axs[i, 0].axis('off')
-        axs[i, 0].set_title(f'Input\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+        try:
+            axs[i, 0].set_title(f'Input\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+        except KeyError:
+            axs[i, 0].set_title(f'Input\nClass {labels[i].item()}\nUnknown', fontsize=8)
 
         # Reconstructed image
         axs[i, 1].imshow(reconstruction.permute(1, 2, 0).cpu(), cmap='gray')
         axs[i, 1].axis('off')
-        axs[i, 1].set_title(f'Reconstruction\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+        try:
+            axs[i, 1].set_title(f'Reconstruction\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+        except KeyError:
+            axs[i, 1].set_title(f'Reconstruction\nClass {labels[i].item()}\nUnknown', fontsize=8)
+
 
     plt.tight_layout()
     plt.suptitle('Original and Reconstructed Images', fontsize=16, y=1.02)
@@ -154,6 +171,7 @@ if __name__ == '__main__':
     from vae_medmnist.models.cvae import CVAE
     from vae_medmnist.models.resnet_vae import ResNetVAE
     from vae_medmnist.models.vae import VAE
+    from vae_medmnist.models.beta_vae import BetaVAE
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--log_path', type=str, help='Path to the training logs')
@@ -172,11 +190,13 @@ if __name__ == '__main__':
         model = ResNetVAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
     elif hparams['model'] == 'cvae':
         model = CVAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/cvae-best-checkpoint.ckpt")
+    elif hparams['model'] == 'beta_vae':
+        model = BetaVAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/betavae-best-checkpoint-v4.ckpt")
     else:
         model = VAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
     model.to(args.device)
 
-    if hparams['datasets'] == 'tissuemnist':
+    if hparams['dataset'] == 'tissuemnist':
         datasetclass = TissueMNIST
         datamodule = MedMNISTDataModule(datasetclass, batch_size=10)
     elif isinstance(hparams['datasets'], list):
@@ -186,6 +206,10 @@ if __name__ == '__main__':
 
     datamodule.setup()
 
+    # Try to get labels from an instance of the dataset class
+    dataset_instance = datasetclass(split='train', download=True)
+    labels = get_labels(dataset_instance)
+
     save_metrics_plot(metrics_df, args.log_path)
     save_generated_images(
         model,
@@ -194,10 +218,11 @@ if __name__ == '__main__':
         args.device,
         os.path.join(args.log_path, 'generated_images.png'),
     )
+
     save_reconstructions(
         model,
         datamodule.test_dataloader(),
         args.device,
         os.path.join(args.log_path, 'reconstructions.png'),
-        datamodule.labels,
+        labels,
     )
