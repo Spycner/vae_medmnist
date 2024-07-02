@@ -141,6 +141,74 @@ def save_reconstructions(model, dataloader, device, save_path, descriptions):
     plt.close()
 
 
+def save_model_comparison_reconstructions(model1, model2, dataloader, device, save_path, descriptions):
+    """Save reconstructions of images from each class for two models side by side."""
+    model1.eval()
+    model2.eval()
+    class_samples = {}
+
+    # Collect one sample from each class
+    for inputs, labels in dataloader:
+        for input, label in zip(inputs, labels):
+            label = label.item()
+            if label not in class_samples:
+                class_samples[label] = input
+            if len(class_samples) == model1.num_classes:
+                break
+        if len(class_samples) == model1.num_classes:
+            break
+
+    inputs = torch.stack(list(class_samples.values())).to(device)
+    labels = torch.tensor(list(class_samples.keys())).to(device)
+
+    with torch.no_grad():
+        # Generate reconstructions for model1
+        if isinstance(model1, CVAE):
+            reconstructions1, _, _ = model1(inputs, labels)
+        elif isinstance(model1, ResNetVAE):
+            _, reconstructions1, _, _ = model1(inputs)
+        elif isinstance(model1, VAE):
+            reconstructions1, _, _ = model1(inputs)
+        else:
+            raise NotImplementedError('Model1 type not supported for reconstructions.')
+
+        # Generate reconstructions for model2
+        if isinstance(model2, CVAE):
+            reconstructions2, _, _ = model2(inputs, labels)
+        elif isinstance(model2, ResNetVAE):
+            _, reconstructions2, _, _ = model2(inputs)
+        elif isinstance(model2, VAE):
+            reconstructions2, _, _ = model2(inputs)
+        else:
+            raise NotImplementedError('Model2 type not supported for reconstructions.')
+
+    # Calculate the number of rows for the grid
+    num_rows = len(class_samples)
+
+    fig, axs = plt.subplots(num_rows, 3, figsize=(9, 3 * num_rows))
+
+    for i, (input, recon1, recon2) in enumerate(zip(inputs, reconstructions1, reconstructions2)):
+        # Original image
+        axs[i, 0].imshow(input.permute(1, 2, 0).cpu(), cmap='gray')
+        axs[i, 0].axis('off')
+        axs[i, 0].set_title(f'Input\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+
+        # Model1 reconstructed image
+        axs[i, 1].imshow(recon1.permute(1, 2, 0).cpu(), cmap='gray')
+        axs[i, 1].axis('off')
+        axs[i, 1].set_title(f'Model1 Reconstruction\nClass {labels[i].item()}', fontsize=8)
+
+        # Model2 reconstructed image
+        axs[i, 2].imshow(recon2.permute(1, 2, 0).cpu(), cmap='gray')
+        axs[i, 2].axis('off')
+        axs[i, 2].set_title(f'Model2 Reconstruction\nClass {labels[i].item()}', fontsize=8)
+
+    plt.tight_layout()
+    plt.suptitle('Original and Reconstructed Images Comparison', fontsize=16, y=1.02)
+    plt.savefig(save_path, bbox_inches='tight', dpi=300)
+    plt.close()
+
+
 if __name__ == '__main__':
     import argparse
     import os
@@ -176,6 +244,18 @@ if __name__ == '__main__':
         model = VAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
     model.to(args.device)
 
+    # Load second model if compare_to is set
+    if 'compare_to' in hparams and hparams['compare_to']:
+        if hparams['compare_to'] == 'resnet_vae':
+            model2 = ResNetVAE.load_from_checkpoint(f"{hparams['compare_dir']}/best-checkpoint.ckpt")
+        elif hparams['compare_to'] == 'cvae':
+            model2 = CVAE.load_from_checkpoint(f"{hparams['compare_dir']}/cvae-best-checkpoint.ckpt")
+        else:
+            model2 = VAE.load_from_checkpoint(f"{hparams['compare_dir']}/best-checkpoint.ckpt")
+        model2.to(args.device)
+    else:
+        model2 = None
+
     if hparams['datasets'] == 'tissuemnist':
         datasetclass = TissueMNIST
         datamodule = MedMNISTDataModule(datasetclass, batch_size=10)
@@ -201,3 +281,12 @@ if __name__ == '__main__':
         os.path.join(args.log_path, 'reconstructions.png'),
         datamodule.labels,
     )
+    if model2 is not None:
+        save_model_comparison_reconstructions(
+            model,
+            model2,
+            datamodule.test_dataloader(),
+            args.device,
+            os.path.join(args.log_path, 'model_comparison_reconstructions.png'),
+            datamodule.labels,
+        )
