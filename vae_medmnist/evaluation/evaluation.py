@@ -209,6 +209,31 @@ def save_model_comparison_reconstructions(model1, model2, dataloader, device, sa
     plt.close()
 
 
+def calculate_fid(real_images, generated_images):
+    """Calculate the Fréchet Inception Distance between two sets of images."""
+    raise NotImplementedError('FID calculation not implemented.')
+
+
+def calculate_ssim(real_images, generated_images):
+    """Calculate the Structural Similarity Index between two sets of images."""
+    raise NotImplementedError('SSIM calculation not implemented.')
+
+
+def calculate_mse(real_images, generated_images):
+    """Calculate the Mean Squared Error between two sets of images."""
+    raise NotImplementedError('MSE calculation not implemented.')
+
+
+def mutual_information(real_images, generated_images):
+    """Calculate the Mutual Information between two sets of images."""
+    raise NotImplementedError('Mutual Information calculation not implemented.')
+
+
+def sample_diversity(generated_images):
+    """Calculate the Sample Diversity between two sets of images."""
+    raise NotImplementedError('Sample Diversity calculation not implemented.')
+
+
 if __name__ == '__main__':
     import argparse
     import os
@@ -241,7 +266,7 @@ if __name__ == '__main__':
     elif hparams['model'] == 'cvae':
         model = CVAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/cvae-best-checkpoint.ckpt")
     else:
-        model = VAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/best-checkpoint.ckpt")
+        model = VAE.load_from_checkpoint(f"{hparams['checkpoint_dir']}/vae-best-checkpoint.ckpt")
     model.to(args.device)
 
     # Load second model if compare_to is set
@@ -251,7 +276,7 @@ if __name__ == '__main__':
         elif hparams['compare_to'] == 'cvae':
             model2 = CVAE.load_from_checkpoint(f"{hparams['compare_dir']}/cvae-best-checkpoint.ckpt")
         else:
-            model2 = VAE.load_from_checkpoint(f"{hparams['compare_dir']}/best-checkpoint.ckpt")
+            model2 = VAE.load_from_checkpoint(f"{hparams['compare_dir']}/vae-best-checkpoint.ckpt")
         model2.to(args.device)
     else:
         model2 = None
