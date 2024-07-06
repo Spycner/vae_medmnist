@@ -1,5 +1,9 @@
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
+from skimage.metrics import mean_squared_error
+from skimage.metrics import normalized_mutual_information as nmi
+from skimage.metrics import structural_similarity as ssim
 
 
 def save_metrics_plot(metrics, save_path):
@@ -209,29 +213,51 @@ def save_model_comparison_reconstructions(model1, model2, dataloader, device, sa
     plt.close()
 
 
-def calculate_fid(real_images, generated_images):
+def calculate_fid(real_images: np.ndarray, generated_images: np.ndarray) -> float:
     """Calculate the Fréchet Inception Distance between two sets of images."""
-    raise NotImplementedError('FID calculation not implemented.')
+    mu1, sigma1 = np.mean(real_images, axis=0), np.cov(real_images, rowvar=False)
+    mu2, sigma2 = np.mean(generated_images, axis=0), np.cov(generated_images, rowvar=False)
+
+    ssdiff = np.sum((mu1 - mu2) ** 2)
+    covmean = np.sqrt(sigma1.dot(sigma2))
+
+    if np.iscomplexobj(covmean):
+        covmean = covmean.real
+    fid = ssdiff + np.trace(sigma1 + sigma2 - 2 * covmean)
+    return fid
 
 
-def calculate_ssim(real_images, generated_images):
+def calculate_ssim(real_images: np.ndarray, generated_images: np.ndarray) -> float:
     """Calculate the Structural Similarity Index between two sets of images."""
-    raise NotImplementedError('SSIM calculation not implemented.')
+    ssim_scores = []
+    for real_image, generated_image in zip(real_images, generated_images):
+        ssim_score = ssim(real_image, generated_image, data_range=generated_image.max() - generated_image.min())
+        ssim_scores.append(ssim_score)
+    return np.mean(ssim_scores)
 
 
-def calculate_mse(real_images, generated_images):
+def calculate_mse(real_images: np.ndarray, generated_images: np.ndarray) -> float:
     """Calculate the Mean Squared Error between two sets of images."""
-    raise NotImplementedError('MSE calculation not implemented.')
+    return mean_squared_error(real_images.flatten(), generated_images.flatten())
 
 
-def mutual_information(real_images, generated_images):
+def mutual_information(real_images: np.ndarray, generated_images: np.ndarray) -> float:
     """Calculate the Mutual Information between two sets of images."""
-    raise NotImplementedError('Mutual Information calculation not implemented.')
+    nmi_scores = []
+    for real_image, generated_image in zip(real_images, generated_images):
+        nmi_score = nmi(real_image.flatten(), generated_image.flatten())
+        nmi_scores.append(nmi_score)
+    return np.mean(nmi_scores)
 
 
-def sample_diversity(generated_images):
+def sample_diversity(generated_images: np.ndarray) -> float:
     """Calculate the Sample Diversity between two sets of images."""
-    raise NotImplementedError('Sample Diversity calculation not implemented.')
+    return np.mean(np.std(generated_images, axis=0))
+
+
+def run_metrics():
+    #!TODO
+    raise NotImplementedError('Metrics calculation not implemented.')
 
 
 if __name__ == '__main__':

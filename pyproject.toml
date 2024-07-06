@@ -15,6 +15,8 @@ dependencies = [
     "torchvision==0.18.1+cu121",
     "torchaudio==2.3.1+cu121",
     "notebook>=7.0.0",
+    "scikit-learn>=1.5.1",
+    "scikit-image>=0.24.0",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"

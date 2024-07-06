@@ -301,10 +301,12 @@ rpds-py==0.18.1
     # via referencing
 ruff==0.4.9
     # via vae-medmnist
-scikit-image==0.23.2
+scikit-image==0.24.0
     # via medmnist
-scikit-learn==1.5.0
+    # via vae-medmnist
+scikit-learn==1.5.1
     # via medmnist
+    # via vae-medmnist
 scipy==1.13.1
     # via scikit-image
     # via scikit-learn
