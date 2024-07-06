@@ -3,7 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 from vae_medmnist.dataloader.medmnist_datamodule import MedMNISTDataModule
-from vae_medmnist.models.beta_vae_v1 import BetaVAE # Assuming your model definition is in beta_vae_v1.py
+from vae_medmnist.models.beta_vae_v1 import BetaVAE  # Assuming your model definition is in beta_vae_v1.py
+from medmnist.dataset import TissueMNIST, ChestMNIST
 
 def load_model(checkpoint_path, hparams_file=None):
     model = BetaVAE.load_from_checkpoint(checkpoint_path, hparams_file=hparams_file)
@@ -37,7 +38,17 @@ def compute_metrics(model, dataloader):
 
 def main(args):
     model = load_model(args.checkpoint_path, args.hparams_file)
-    datamodule = MedMNISTDataModule(data_dir=args.data_dir)
+    
+    # Load dataset based on hparams
+    hparams = model.hparams
+    if hparams['dataset'] == 'tissuemnist':
+        datasetclass = TissueMNIST
+        datamodule = MedMNISTDataModule(datasetclass, batch_size=10)
+    elif isinstance(hparams['datasets'], list):
+        datamodule = AccumulatedMedMNIST(hparams['datasets'], batch_size=10)
+    else:
+        raise ValueError(f"Unknown dataset: {hparams['datasets']}")
+    
     datamodule.setup(stage='test')
     test_data = datamodule.test_dataloader()
 
@@ -52,9 +63,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument('--checkpoint_path', type=str, default="results/checkpoints/beta_vae/betavae-best-checkpoint-v24.ckpt" , help='Path to the model checkpoint')
+    parser.add_argument('--checkpoint_path', type=str, default="results/checkpoints/beta_vae/betavae-best-checkpoint-v24.ckpt", help='Path to the model checkpoint')
     parser.add_argument('--hparams_file', type=str, default="results/version_32/hparams.yaml", help='Path to the hyperparameters file')
-    parser.add_argument('--data_dir', type=str, default="results/version_32/metrics.csv", help='Directory containing the dataset')
     args = parser.parse_args()
 
     main(args)
