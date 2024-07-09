@@ -1,7 +1,8 @@
 batch_size: 512
 checkpoint_dir: results/checkpoints/vae
 config: null
-datasets: tissuemnist
+datasets: 
+- tissuemnist
 hidden_channels: null
 input_channels: 1
 kl_coeff: 0.00025
