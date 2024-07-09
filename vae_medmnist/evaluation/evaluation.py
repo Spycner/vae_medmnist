@@ -411,30 +411,30 @@ if __name__ == '__main__':
 
     datamodule.setup()
 
-    # save_metrics_plot(metrics_df, args.log_path)
-    # save_generated_images(
-    #     model,
-    #     datamodule,
-    #     args.num_samples,
-    #     args.device,
-    #     os.path.join(args.log_path, 'generated_images.png'),
-    # )
-    # save_reconstructions(
-    #     model,
-    #     datamodule.test_dataloader(),
-    #     args.device,
-    #     os.path.join(args.log_path, 'reconstructions.png'),
-    #     datamodule.labels,
-    # )
-    # if model2 is not None:
-    #     save_model_comparison_reconstructions(
-    #         model,
-    #         model2,
-    #         datamodule.test_dataloader(),
-    #         args.device,
-    #         os.path.join(args.log_path, 'model_comparison_reconstructions.png'),
-    #         datamodule.labels,
-    #     )
+    save_metrics_plot(metrics_df, args.log_path)
+    save_generated_images(
+        model,
+        datamodule,
+        args.num_samples,
+        args.device,
+        os.path.join(args.log_path, 'generated_images.png'),
+    )
+    save_reconstructions(
+        model,
+        datamodule.test_dataloader(),
+        args.device,
+        os.path.join(args.log_path, 'reconstructions.png'),
+        datamodule.labels,
+    )
+    if model2 is not None:
+        save_model_comparison_reconstructions(
+            model,
+            model2,
+            datamodule.test_dataloader(),
+            args.device,
+            os.path.join(args.log_path, 'model_comparison_reconstructions.png'),
+            datamodule.labels,
+        )
 
     metrics = run_metrics(model, datamodule.test_dataloader(), args.device)
     metrics_file = os.path.join(args.log_path, 'evaluation_metrics.txt')
