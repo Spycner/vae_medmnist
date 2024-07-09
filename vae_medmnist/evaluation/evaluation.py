@@ -19,7 +19,7 @@ def save_metrics_plot(metrics, save_path):
         plt.plot(metrics['train_kl'].dropna(), label='Train KL')
     if 'train_recon_loss' in metrics.columns:
         plt.plot(metrics['train_recon_loss'].dropna(), label='Train Recon Loss')
-    plt.xlabel('Epochs')
+    plt.xlabel('Steps')
     plt.ylabel('Loss')
     plt.title('Training Losses')
     plt.legend()
@@ -34,7 +34,7 @@ def save_metrics_plot(metrics, save_path):
         plt.plot(metrics['val_kl'].dropna(), label='Validation KL')
     if 'val_recon_loss' in metrics.columns:
         plt.plot(metrics['val_recon_loss'].dropna(), label='Validation Recon Loss')
-    plt.xlabel('Epochs')
+    plt.xlabel('Steps')
     plt.ylabel('Loss')
     plt.title('Validation Losses')
     plt.legend()
@@ -47,7 +47,7 @@ def save_metrics_plot(metrics, save_path):
         plt.plot(metrics['train_loss'].dropna(), label='Train Loss')
     if 'val_loss' in metrics.columns:
         plt.plot(metrics['val_loss'].dropna(), label='Validation Loss')
-    plt.xlabel('Epochs')
+    plt.xlabel('Steps')
     plt.ylabel('Loss')
     plt.title('Comparison of Training and Validation Loss')
     plt.legend()
@@ -125,20 +125,34 @@ def save_reconstructions(model, dataloader, device, save_path, descriptions):
             raise NotImplementedError('Model type not supported for reconstructions.')
 
     # Calculate the number of rows for the grid
-    num_rows = len(class_samples)
+    num_classes = len(class_samples)
+    num_cols = 4  # Two pairs of original and reconstruction
+    num_rows = (num_classes + 1) // 2  # Divide classes into two rows, rounding up
 
-    fig, axs = plt.subplots(num_rows, 2, figsize=(6, 3 * num_rows))
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(12, 3 * num_rows))
 
     for i, (input, reconstruction) in enumerate(zip(inputs, reconstructions)):
+        row = i // 2
+        col = (i % 2) * 2
+
         # Original image
-        axs[i, 0].imshow(input.permute(1, 2, 0).cpu(), cmap='gray')
-        axs[i, 0].axis('off')
-        axs[i, 0].set_title(f'Input\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+        axs[row, col].imshow(input.permute(1, 2, 0).cpu(), cmap='gray')
+        axs[row, col].axis('off')
+        axs[row, col].set_title(f'Input\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
 
         # Reconstructed image
-        axs[i, 1].imshow(reconstruction.permute(1, 2, 0).cpu(), cmap='gray')
-        axs[i, 1].axis('off')
-        axs[i, 1].set_title(f'Reconstruction\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8)
+        axs[row, col + 1].imshow(reconstruction.permute(1, 2, 0).cpu(), cmap='gray')
+        axs[row, col + 1].axis('off')
+        axs[row, col + 1].set_title(
+            f'Reconstruction\nClass {labels[i].item()}\n{descriptions[labels[i].item()]}', fontsize=8
+        )
+
+    # Remove any unused subplots
+    for i in range(num_classes, num_rows * 2):
+        row = i // 2
+        col = (i % 2) * 2
+        axs[row, col].axis('off')
+        axs[row, col + 1].axis('off')
 
     plt.tight_layout()
     plt.suptitle('Original and Reconstructed Images', fontsize=16, y=1.02)
