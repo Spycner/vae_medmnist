@@ -1,6 +1,6 @@
 import logging
 from argparse import ArgumentParser
-from typing import List
+from typing import List, Union
 
 import pytorch_lightning as pl
 import torch
@@ -149,11 +149,21 @@ class CVAE(pl.LightningModule):
         """Configure the optimizers."""
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
-    def sample(self, num_samples: int, class_idx: int, device=None):
+    def sample(self, num_samples: int, class_idx: Union[int, torch.Tensor], device=None):
         device = device or self.device
-        y_flat = torch.tensor([class_idx], dtype=torch.int64)
-        y_onehot = one_hot(y_flat, self.num_classes)
-        z = torch.randn(num_samples, self.latent_dim, device=device)
+
+        if isinstance(class_idx, int):
+            # Single class index (backwards compatible)
+            y_flat = torch.tensor([class_idx], dtype=torch.int64, device=device)
+            y_onehot = F.one_hot(y_flat, self.num_classes).float()
+            z = torch.randn(num_samples, self.latent_dim, device=device)
+        else:
+            # Multiple class indices (batch mode)
+            class_idx = class_idx.to(device)
+            if class_idx.dim() == 2:
+                class_idx = class_idx.squeeze(1)  # Remove the extra dimension
+            y_onehot = F.one_hot(class_idx.to(torch.int64), self.num_classes).float()
+            z = torch.randn(len(class_idx), self.latent_dim, device=device)
 
         return self.decode(z, y_onehot)
 

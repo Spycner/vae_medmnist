@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from skimage.metrics import mean_squared_error
+from scipy import linalg
+from skimage.metrics import mean_squared_error, peak_signal_noise_ratio
 from skimage.metrics import normalized_mutual_information as nmi
-from skimage.metrics import structural_similarity as ssim
+from tqdm import tqdm
 
 
 def save_metrics_plot(metrics, save_path):
@@ -123,7 +124,7 @@ def save_reconstructions(model, dataloader, device, save_path, descriptions):
         else:
             raise NotImplementedError('Model type not supported for reconstructions.')
 
-    # Calculate the number of rows and columns for the grid
+    # Calculate the number of rows for the grid
     num_rows = len(class_samples)
 
     fig, axs = plt.subplots(num_rows, 2, figsize=(6, 3 * num_rows))
@@ -215,30 +216,74 @@ def save_model_comparison_reconstructions(model1, model2, dataloader, device, sa
 
 def calculate_fid(real_images: np.ndarray, generated_images: np.ndarray) -> float:
     """Calculate the Fréchet Inception Distance between two sets of images."""
-    mu1, sigma1 = np.mean(real_images, axis=0), np.cov(real_images, rowvar=False)
-    mu2, sigma2 = np.mean(generated_images, axis=0), np.cov(generated_images, rowvar=False)
+    # Flatten the images to 2D arrays
+    real_images_flat = real_images.reshape(real_images.shape[0], -1)
+    generated_images_flat = generated_images.reshape(generated_images.shape[0], -1)
 
-    ssdiff = np.sum((mu1 - mu2) ** 2)
-    covmean = np.sqrt(sigma1.dot(sigma2))
+    mu1, sigma1 = np.mean(real_images_flat, axis=0), np.cov(real_images_flat, rowvar=False)
+    mu2, sigma2 = np.mean(generated_images_flat, axis=0), np.cov(generated_images_flat, rowvar=False)
 
-    if np.iscomplexobj(covmean):
-        covmean = covmean.real
-    fid = ssdiff + np.trace(sigma1 + sigma2 - 2 * covmean)
-    return fid
+    try:
+        diff = mu1 - mu2
+
+        # Product might be almost singular
+        covmean, _ = linalg.sqrtm(sigma1.dot(sigma2), disp=False)
+        if not np.isfinite(covmean).all():
+            msg = f'fid calculation produces singular product; adding {1e-6} to diagonal of cov estimates'
+            print(msg)
+            offset = np.eye(sigma1.shape[0]) * 1e-6
+            covmean = linalg.sqrtm((sigma1 + offset).dot(sigma2 + offset))
+
+        # Numerical error might give slight imaginary component
+        if np.iscomplexobj(covmean):
+            if not np.allclose(np.diagonal(covmean).imag, 0, atol=1e-3):
+                m = np.max(np.abs(covmean.imag))
+                raise ValueError(f'Imaginary component {m}')
+            covmean = covmean.real
+
+        tr_covmean = np.trace(covmean)
+
+        fid = diff.dot(diff) + np.trace(sigma1) + np.trace(sigma2) - 2 * tr_covmean
+
+        return fid
+    except ValueError as e:
+        print(f'Error in FID calculation: {e}')
+        return float('nan')
 
 
-def calculate_ssim(real_images: np.ndarray, generated_images: np.ndarray) -> float:
-    """Calculate the Structural Similarity Index between two sets of images."""
-    ssim_scores = []
+def calculate_image_metrics(real_images: np.ndarray, generated_images: np.ndarray) -> dict:
+    """Calculate MSE and PSNR between two sets of images."""
+    mse_scores = []
+    psnr_scores = []
+
     for real_image, generated_image in zip(real_images, generated_images):
-        ssim_score = ssim(real_image, generated_image, data_range=generated_image.max() - generated_image.min())
-        ssim_scores.append(ssim_score)
-    return np.mean(ssim_scores)
+        # Ensure images are 2D (grayscale)
+        if real_image.ndim == 4:
+            real_image = real_image.squeeze()
+        if generated_image.ndim == 4:
+            generated_image = generated_image.squeeze()
 
+        if real_image.ndim == 3:
+            real_image = real_image[0]  # Take the first channel if it's a 3D image
+        if generated_image.ndim == 3:
+            generated_image = generated_image[0]  # Take the first channel if it's a 3D image
 
-def calculate_mse(real_images: np.ndarray, generated_images: np.ndarray) -> float:
-    """Calculate the Mean Squared Error between two sets of images."""
-    return mean_squared_error(real_images.flatten(), generated_images.flatten())
+        try:
+            mse = mean_squared_error(real_image, generated_image)
+            psnr = peak_signal_noise_ratio(real_image, generated_image, data_range=real_image.max() - real_image.min())
+
+            mse_scores.append(mse)
+            psnr_scores.append(psnr)
+        except Exception as e:
+            print(f'Error calculating metrics for an image pair: {e}')
+            print(f'Image shapes: real {real_image.shape}, generated {generated_image.shape}')
+            continue
+
+    if not mse_scores:
+        print('Warning: Could not calculate metrics for any image pair.')
+        return {'MSE': float('nan'), 'PSNR': float('nan')}
+
+    return {'MSE': np.mean(mse_scores), 'PSNR': np.mean(psnr_scores)}
 
 
 def mutual_information(real_images: np.ndarray, generated_images: np.ndarray) -> float:
@@ -255,9 +300,58 @@ def sample_diversity(generated_images: np.ndarray) -> float:
     return np.mean(np.std(generated_images, axis=0))
 
 
-def run_metrics():
-    #!TODO
-    raise NotImplementedError('Metrics calculation not implemented.')
+def run_metrics(model, dataloader, device):
+    """Calculate and return various metrics for the VAE model."""
+    model.eval()
+    real_images = []
+    generated_images = []
+    reconstructed_images = []
+
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc='Processing batches'):
+            inputs, labels = batch
+            inputs = inputs.to(device)
+
+            # Generate reconstructions
+            if isinstance(model, CVAE):
+                reconstructions, _, _ = model(inputs, labels)
+            elif isinstance(model, ResNetVAE):
+                _, reconstructions, _, _ = model(inputs)
+            elif isinstance(model, VAE):
+                reconstructions, _, _ = model(inputs)
+            else:
+                raise NotImplementedError('Model type not supported for reconstructions.')
+
+            real_images.append(inputs.cpu().numpy())
+            reconstructed_images.append(reconstructions.cpu().numpy())
+
+            # Generate new samples
+            if isinstance(model, CVAE):
+                samples = model.sample(inputs.size(0), labels, device)
+            else:
+                samples = model.sample(inputs.size(0), device)
+
+            generated_images.append(samples.cpu().numpy())
+
+    real_images = np.concatenate(real_images)
+    generated_images = np.concatenate(generated_images)
+    reconstructed_images = np.concatenate(reconstructed_images)
+
+    # Calculate metrics
+    fid_score = calculate_fid(real_images, generated_images)
+    image_metrics = calculate_image_metrics(real_images, reconstructed_images)
+    mi_score = mutual_information(real_images, reconstructed_images)
+    diversity_score = sample_diversity(generated_images)
+
+    metrics = {
+        'FID': fid_score,
+        'MSE': image_metrics['MSE'],
+        'PSNR': image_metrics['PSNR'],
+        'Mutual Information': mi_score,
+        'Sample Diversity': diversity_score,
+    }
+
+    return metrics
 
 
 if __name__ == '__main__':
@@ -317,27 +411,33 @@ if __name__ == '__main__':
 
     datamodule.setup()
 
-    save_metrics_plot(metrics_df, args.log_path)
-    save_generated_images(
-        model,
-        datamodule,
-        args.num_samples,
-        args.device,
-        os.path.join(args.log_path, 'generated_images.png'),
-    )
-    save_reconstructions(
-        model,
-        datamodule.test_dataloader(),
-        args.device,
-        os.path.join(args.log_path, 'reconstructions.png'),
-        datamodule.labels,
-    )
-    if model2 is not None:
-        save_model_comparison_reconstructions(
-            model,
-            model2,
-            datamodule.test_dataloader(),
-            args.device,
-            os.path.join(args.log_path, 'model_comparison_reconstructions.png'),
-            datamodule.labels,
-        )
+    # save_metrics_plot(metrics_df, args.log_path)
+    # save_generated_images(
+    #     model,
+    #     datamodule,
+    #     args.num_samples,
+    #     args.device,
+    #     os.path.join(args.log_path, 'generated_images.png'),
+    # )
+    # save_reconstructions(
+    #     model,
+    #     datamodule.test_dataloader(),
+    #     args.device,
+    #     os.path.join(args.log_path, 'reconstructions.png'),
+    #     datamodule.labels,
+    # )
+    # if model2 is not None:
+    #     save_model_comparison_reconstructions(
+    #         model,
+    #         model2,
+    #         datamodule.test_dataloader(),
+    #         args.device,
+    #         os.path.join(args.log_path, 'model_comparison_reconstructions.png'),
+    #         datamodule.labels,
+    #     )
+
+    metrics = run_metrics(model, datamodule.test_dataloader(), args.device)
+    metrics_file = os.path.join(args.log_path, 'evaluation_metrics.txt')
+    with open(metrics_file, 'w') as f:
+        for metric_name, metric_value in metrics.items():
+            f.write(f'{metric_name}: {metric_value}\n')
