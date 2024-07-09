@@ -126,14 +126,14 @@ def save_reconstructions(model, dataloader, device, save_path, descriptions):
 
     # Calculate the number of rows for the grid
     num_classes = len(class_samples)
-    num_cols = 4  # Two pairs of original and reconstruction
-    num_rows = (num_classes + 1) // 2  # Divide classes into two rows, rounding up
+    num_cols = 8  # Four pairs of original and reconstruction
+    num_rows = (num_classes + 3) // 4  # Divide classes into four rows, rounding up
 
-    fig, axs = plt.subplots(num_rows, num_cols, figsize=(12, 3 * num_rows))
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(24, 3 * num_rows))
 
     for i, (input, reconstruction) in enumerate(zip(inputs, reconstructions)):
-        row = i // 2
-        col = (i % 2) * 2
+        row = i // 4
+        col = (i % 4) * 2
 
         # Original image
         axs[row, col].imshow(input.permute(1, 2, 0).cpu(), cmap='gray')
@@ -148,9 +148,9 @@ def save_reconstructions(model, dataloader, device, save_path, descriptions):
         )
 
     # Remove any unused subplots
-    for i in range(num_classes, num_rows * 2):
-        row = i // 2
-        col = (i % 2) * 2
+    for i in range(num_classes, num_rows * 4):
+        row = i // 4
+        col = (i % 4) * 2
         axs[row, col].axis('off')
         axs[row, col + 1].axis('off')
 
